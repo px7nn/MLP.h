@@ -16,10 +16,12 @@
 #define MLP_H
 
 #define MLP_VERSION_MAJOR 0
-#define MLP_VERSION_MINOR 1
+#define MLP_VERSION_MINOR 2
 #define MLP_VERSION_PATCH 0
-#define MLP_VERSION_STRING "0.1.0"
+#define MLP_VERSION_STRING "0.2.0"
 
+#define MLP_MAGIC   0x4D4C5031u /* "MLP1" */
+#define MLP_VERSION 1u
 
 /*=============================================================================
     Standard Library
@@ -30,6 +32,28 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdint.h>
+
+
+/*=============================================================================
+    Error Handling
+=============================================================================*/
+
+typedef enum {
+    MLP_OK = 0,
+ 
+    MLP_ERR_NULL_POINTER,        // A required pointer argument was NULL
+    MLP_ERR_INVALID_ARGUMENT,    // An argument was structurally invalid (e.g. zero-sized)
+    MLP_ERR_ALLOC_FAILED,        // A heap allocation failed
+    MLP_ERR_SHAPE_MISMATCH,      // Network/Dataset dimensions are incompatible
+ 
+    MLP_ERR_FILE_OPEN,           // Could not open a file for reading/writing
+    MLP_ERR_FILE_READ,           // A read from a file failed or was truncated
+    MLP_ERR_FILE_WRITE,          // A write to a file failed or was truncated
+    MLP_ERR_FILE_FORMAT,         // File contents did not match the expected format (bad magic/version)
+ 
+    MLP_ERR_COUNT                // Sentinel: number of error codes, not a real error
+} MLP_Error;
 
 
 /*=============================================================================
@@ -99,11 +123,18 @@ static bool    MLP_Train(Network *net, const Dataset *d, const TrainOptions *opt
 static bool    MLP_Predict_Dataset(const Network *net, const Dataset *d, double *buf);
 static void    MLP_Destroy_Network(Network *net);
 
+static bool MLP_Save(const Network *net, const char *filename);
+static bool MLP_Load(Network *net, const char *filename);
+
+static const char *MLP_ErrorString(MLP_Error err);
+static MLP_Error   MLP_GetLastError(void);
+
 
 /*=============================================================================
     Private API
 =============================================================================*/
 
+static inline void _mlp_set_error(MLP_Error err);
 
 static void _print_summary(size_t epoch, size_t max_epochs, double loss, const char *reason);
 
@@ -133,6 +164,31 @@ static void _backprop(
 =============================================================================*/
 
 #ifdef MLP_IMPLEMENTATION
+
+static MLP_Error _mlp_last_error = MLP_OK;
+ 
+static inline void _mlp_set_error(MLP_Error err){
+    _mlp_last_error = err;
+}
+ 
+static MLP_Error MLP_GetLastError(void){
+    return _mlp_last_error;
+}
+
+static const char *MLP_ErrorString(MLP_Error err){
+    switch(err){
+        case MLP_OK:                      return "No error";
+        case MLP_ERR_NULL_POINTER:        return "A required argument was NULL";
+        case MLP_ERR_INVALID_ARGUMENT:    return "An argument was invalid";
+        case MLP_ERR_ALLOC_FAILED:        return "Memory allocation failed";
+        case MLP_ERR_SHAPE_MISMATCH:      return "Network and dataset dimensions are incompatible";
+        case MLP_ERR_FILE_OPEN:           return "Could not open file";
+        case MLP_ERR_FILE_READ:           return "Failed to read file (unexpected EOF or I/O error)";
+        case MLP_ERR_FILE_WRITE:          return "Failed to write file (disk full or I/O error)";
+        case MLP_ERR_FILE_FORMAT:         return "File is not a valid MLP model file";
+        default:                          return "Unknown error";
+    }
+}
 
 
 static void _print_summary(size_t epoch, size_t max_epochs, double loss, const char *reason){
@@ -227,6 +283,7 @@ static _Workspace _Workspace_Create(const Network *net){
             free(ws.deltas);
         }
 
+        _mlp_set_error(MLP_ERR_ALLOC_FAILED);
         return (_Workspace){0};
 }
 
@@ -331,8 +388,14 @@ static Dataset MLP_Create_Dataset(
     const size_t n_features,
     const size_t n_outputs
 ){
-    if(!samples || n_samples == 0 || n_features == 0)
+    if(!samples){
+        _mlp_set_error(MLP_ERR_NULL_POINTER);
         return (Dataset){0};
+    }
+    if(n_samples == 0 || n_features == 0){
+        _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
+        return (Dataset){0};
+    }
 
     return (Dataset){
         samples, 
@@ -346,18 +409,28 @@ static Dataset MLP_Create_Dataset(
 static Network MLP_Create_Network(const size_t *topology, const size_t topology_size){
     Network net = {0};
 
-    if(!topology || topology_size < 2)
+    if(!topology){
+        _mlp_set_error(MLP_ERR_NULL_POINTER);
         return net;
+    }
+    if(topology_size < 2){
+        _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
+        return net;
+    }
 
     for (size_t i = 0; i < topology_size; ++i)
-        if (topology[i] == 0)
+        if (topology[i] == 0){
+            _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
             return net;
+        }
 
     net.n_layers = topology_size - 1;
 
     net.layers = calloc(net.n_layers, sizeof *net.layers);
-    if(!net.layers)
+    if(!net.layers){
+        _mlp_set_error(MLP_ERR_ALLOC_FAILED);
         return (Network){0};
+    }
 
     for(size_t i = 0; i < net.n_layers; ++i){
         Layer *layer = &net.layers[i];
@@ -390,6 +463,7 @@ static Network MLP_Create_Network(const size_t *topology, const size_t topology_
 
     fail:
         MLP_Destroy_Network(&net);
+        _mlp_set_error(MLP_ERR_ALLOC_FAILED);
         return (Network){0};
 }
 
@@ -459,18 +533,26 @@ static bool MLP_Train(
     const Dataset *d,
     const TrainOptions *options
 ){
-    if(!net || !net->layers || net->n_layers == 0)
+    if(!net || !net->layers || net->n_layers == 0){
+        _mlp_set_error(MLP_ERR_NULL_POINTER);
         return false;
-    if(!d || !d->samples || !d->output)
+    }
+    if(!d || !d->samples || !d->output){
+        _mlp_set_error(MLP_ERR_NULL_POINTER);
         return false;
-    if(!options)
+    }
+    if(!options){
+        _mlp_set_error(MLP_ERR_NULL_POINTER);
         return false;
-
-    if(net->layers[0].inputs != d->n_features)
+    }
+    if(net->layers[0].inputs != d->n_features){
+        _mlp_set_error(MLP_ERR_SHAPE_MISMATCH);
         return false;
-
-    if(net->layers[net->n_layers - 1].neurons != d->n_outputs)
+    }
+    if(net->layers[net->n_layers - 1].neurons != d->n_outputs){
+        _mlp_set_error(MLP_ERR_SHAPE_MISMATCH);
         return false;
+    }
 
     _Workspace ws = _Workspace_Create(net);
 
@@ -533,18 +615,26 @@ static bool MLP_Train(
 }
 
 static bool MLP_Predict_Dataset(const Network *net, const Dataset *d, double *buf){
-    if(!net || !net->layers || net->n_layers == 0)
+    if(!net || !net->layers || net->n_layers == 0){
+        _mlp_set_error(MLP_ERR_NULL_POINTER);
         return false;
-    if(!d || !d->samples)
+    }
+    if(!d || !d->samples){
+        _mlp_set_error(MLP_ERR_NULL_POINTER);
         return false;
-    if(!buf)
+    }
+    if(!buf){
+        _mlp_set_error(MLP_ERR_NULL_POINTER);
         return false;
-
-    if(net->layers[0].inputs != d->n_features)
+    }
+    if(net->layers[0].inputs != d->n_features){
+        _mlp_set_error(MLP_ERR_SHAPE_MISMATCH);
         return false;
-
-    if(net->layers[net->n_layers - 1].neurons != d->n_outputs)
+    }
+    if(net->layers[net->n_layers - 1].neurons != d->n_outputs){
+        _mlp_set_error(MLP_ERR_SHAPE_MISMATCH);
         return false;
+    }
 
     _Workspace ws = _Workspace_Create(net);
 
@@ -576,6 +666,154 @@ static void MLP_Destroy_Network(Network *net){
 
     net->layers = NULL;
     net->n_layers = 0;
+}
+
+
+static bool MLP_Save(const Network *net, const char *filename){
+    if(!net || !net->layers || !filename){
+        _mlp_set_error(MLP_ERR_NULL_POINTER);
+        return false;
+    }
+
+    FILE *fp = fopen(filename, "wb");
+    if(!fp){
+        _mlp_set_error(MLP_ERR_FILE_OPEN);
+        return false;
+    }
+
+    uint32_t magic   = MLP_MAGIC;
+    uint32_t version = MLP_VERSION;
+
+    if(fwrite(&magic,   sizeof magic,   1, fp) != 1)
+        goto fail;
+    if(fwrite(&version, sizeof version, 1, fp) != 1)
+        goto fail;
+
+    if(fwrite(&net->n_layers, sizeof net->n_layers, 1, fp) != 1)
+        goto fail;
+
+    for(size_t i=0; i<net->n_layers; ++i){
+        const Layer *layer = &net->layers[i];
+
+        if(fwrite(&layer->neurons, sizeof layer->neurons, 1, fp) != 1)
+            goto fail;
+        if(fwrite(&layer->inputs,  sizeof layer->inputs,  1, fp) != 1)
+            goto fail;
+
+
+        if(fwrite(
+            layer->weights, 
+            sizeof *layer->weights, 
+            layer->inputs * layer->neurons,
+            fp
+        ) != layer->inputs * layer->neurons) goto fail;
+
+        if(fwrite(
+            layer->biases,
+            sizeof *layer->biases,
+            layer->neurons,
+            fp
+        ) != layer->neurons) goto fail;
+    }
+    fclose(fp);
+    return true;
+
+    fail:
+        fclose(fp);
+        remove(filename);
+        _mlp_set_error(MLP_ERR_FILE_WRITE);
+        return false;
+}
+
+static bool MLP_Load(Network *net, const char *filename){
+    if(!net || !filename){
+        _mlp_set_error(MLP_ERR_NULL_POINTER);
+        return false;
+    }
+    
+    FILE *fp = fopen(filename, "rb");
+    if(!fp){
+        _mlp_set_error(MLP_ERR_FILE_OPEN);
+        return false;
+    }
+    
+    uint32_t magic;
+    uint32_t version;
+
+    if(fread(&magic,   sizeof magic,   1, fp) != 1){
+        _mlp_set_error(MLP_ERR_FILE_READ);
+        goto fail;
+    }
+    if(fread(&version, sizeof version, 1, fp) != 1){
+        _mlp_set_error(MLP_ERR_FILE_READ);
+        goto fail;
+    }
+
+    if(magic != MLP_MAGIC || version != MLP_VERSION){
+        _mlp_set_error(MLP_ERR_FILE_FORMAT);
+        goto fail;
+    }
+
+    MLP_Destroy_Network(net);
+
+    if(fread(&net->n_layers, sizeof net->n_layers, 1, fp) != 1){
+        _mlp_set_error(MLP_ERR_FILE_READ);
+        goto fail;
+    }
+
+    net->layers = calloc(net->n_layers, sizeof *net->layers);
+    if(!net->layers){
+        _mlp_set_error(MLP_ERR_ALLOC_FAILED);
+        goto fail;
+    }
+
+    for(size_t i=0; i<net->n_layers; ++i){
+        Layer *layer = &net->layers[i];
+
+        if(fread(&layer->neurons, sizeof layer->neurons, 1, fp) != 1){
+            _mlp_set_error(MLP_ERR_FILE_READ);
+            goto fail;
+        }
+        if(fread(&layer->inputs,  sizeof layer->inputs,  1, fp) != 1){
+            _mlp_set_error(MLP_ERR_FILE_READ);
+            goto fail;
+        }
+
+        layer->weights = malloc(layer->neurons * layer->inputs * sizeof *layer->weights);
+        layer->biases  = malloc(layer->neurons * sizeof *layer->biases);
+
+        if(!layer->weights || !layer->biases){
+            _mlp_set_error(MLP_ERR_ALLOC_FAILED);
+            goto fail;
+        }
+        
+
+        if(fread(
+            layer->weights,
+            sizeof *layer->weights,
+            layer->neurons * layer->inputs,
+            fp
+        ) != layer->neurons * layer->inputs) {
+            _mlp_set_error(MLP_ERR_FILE_READ);
+            goto fail;
+        }
+        if(fread(
+            layer->biases,
+            sizeof *layer->biases,
+            layer->neurons,
+            fp
+        ) != layer->neurons) {
+            _mlp_set_error(MLP_ERR_FILE_READ);
+            goto fail;
+        }
+    }
+    fclose(fp);
+    return true;
+
+    fail:
+        fclose(fp);
+        MLP_Destroy_Network(net);
+        return false;
 }
 
 #endif /* MLP_IMPLEMENTATION */
