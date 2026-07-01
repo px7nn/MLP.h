@@ -68,7 +68,46 @@ Dataset test = MLP_Create_Dataset(X, NULL, 4, 2, 1);
 MLP_Predict_Dataset(&net, &test, preds);
 ```
 
-## 6. Clean up
+## 6. Save and load a model
+
+Once trained, a network can be written to disk and loaded back later
+without retraining:
+
+```c
+if (!MLP_Save(&net, "xor.mlp")) {
+    printf("Save failed: %s\n", MLP_ErrorString(MLP_GetLastError()));
+}
+```
+
+```c
+Network loaded = {0};
+
+if (!MLP_Load(&loaded, "xor.mlp")) {
+    printf("Load failed: %s\n", MLP_ErrorString(MLP_GetLastError()));
+}
+```
+
+`MLP_Load` allocates everything it needs, so `loaded` just needs to be
+zero-initialized (or a network you're fine seeing destroyed and
+replaced) before the call.
+
+## 7. Handle errors
+
+Every public function that can fail sets a retrievable error code
+instead of (or in addition to) returning `false`/a zeroed struct:
+
+```c
+Network net = MLP_Create_Network(NULL, 3);
+if (!net.layers) {
+    printf("%s\n", MLP_ErrorString(MLP_GetLastError()));
+    // "A required argument was NULL"
+}
+```
+
+Call `MLP_ErrorString(MLP_GetLastError())` right after a failing call to
+get a human-readable reason.
+
+## 8. Clean up
 
 ```c
 MLP_Destroy_Network(&net);
@@ -76,3 +115,12 @@ MLP_Destroy_Network(&net);
 
 Datasets don't own their data (they just point at your arrays), so there's
 nothing to free there.
+
+## Full examples
+
+The [`examples/`](../examples/) directory has two runnable programs:
+
+- [`xor_gate.c`](../examples/xor_gate.c) — trains a network on XOR from
+  scratch and saves it to `xor.mlp`.
+- [`load_model.c`](../examples/load_model.c) — loads `xor.mlp` (run
+  `xor_gate.c` first) and runs inference without retraining.

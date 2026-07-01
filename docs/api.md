@@ -4,7 +4,51 @@ All public symbols are declared in `MLP.h`. Implementations are only
 compiled in the translation unit that defines `MLP_IMPLEMENTATION` before
 including the header.
 
+## Version & format macros
+
+```c
+#define MLP_VERSION_MAJOR 0
+#define MLP_VERSION_MINOR 2
+#define MLP_VERSION_PATCH 0
+#define MLP_VERSION_STRING "0.2.0"
+
+#define MLP_MAGIC   0x4D4C5031u /* "MLP1" */
+#define MLP_VERSION 1u
+```
+
+`MLP_VERSION_*`/`MLP_VERSION_STRING` describe the library release (see
+[Versioning](../README.md#versioning) in the README). `MLP_MAGIC` and
+`MLP_VERSION` are separate — they identify the on-disk **model file
+format** used by `MLP_Save`/`MLP_Load`, and only change when that binary
+format changes, independently of the library's own version number.
+
 ## Types
+
+### `MLP_Error`
+
+```c
+typedef enum {
+    MLP_OK = 0,
+
+    MLP_ERR_NULL_POINTER,        // A required pointer argument was NULL
+    MLP_ERR_INVALID_ARGUMENT,    // An argument was structurally invalid (e.g. zero-sized)
+    MLP_ERR_ALLOC_FAILED,        // A heap allocation failed
+    MLP_ERR_SHAPE_MISMATCH,      // Network/Dataset dimensions are incompatible
+
+    MLP_ERR_FILE_OPEN,           // Could not open a file for reading/writing
+    MLP_ERR_FILE_READ,           // A read from a file failed or was truncated
+    MLP_ERR_FILE_WRITE,          // A write to a file failed or was truncated
+    MLP_ERR_FILE_FORMAT,         // File contents did not match the expected format (bad magic/version)
+
+    MLP_ERR_COUNT                // Sentinel: number of error codes, not a real error
+} MLP_Error;
+```
+
+Every public function that can fail sets a thread-unaware global "last
+error" on failure, retrievable with `MLP_GetLastError()`. Functions that
+return a struct by value (`Dataset`, `Network`) signal failure by
+returning a zeroed struct — check that, then consult
+`MLP_GetLastError()` for the reason.
 
 ### `TrainOptions`
 
@@ -147,6 +191,59 @@ void MLP_Destroy_Network(Network *net);
 
 Frees all layer weights/biases and the layer array, then zeroes `net`.
 Safe to call on an already-destroyed or zero-initialized `Network`.
+
+### `MLP_Save`
+
+```c
+bool MLP_Save(const Network *net, const char *filename);
+```
+
+Writes `net` to `filename` in the library's binary model format (magic
+number `MLP_MAGIC`, format version `MLP_VERSION`, followed by
+`n_layers` and each layer's shape, weights, and biases). Returns `false`
+if `net`/`net->layers`/`filename` is NULL, or if any file write fails —
+on write failure the partially-written file is deleted. Overwrites
+`filename` if it already exists.
+
+### `MLP_Load`
+
+```c
+bool MLP_Load(Network *net, const char *filename);
+```
+
+Reads a model previously written by `MLP_Save()` from `filename` and
+populates `net`, allocating the layer array and each layer's
+weights/biases. `net` may point to a zero-initialized `Network` or an
+existing one — either way, any network `*net` currently holds is
+destroyed (via `MLP_Destroy_Network`) before the new one is loaded.
+Returns `false` if `net`/`filename` is NULL, if the file can't be
+opened, if the magic number or version doesn't match (`MLP_MAGIC`,
+`MLP_VERSION` — i.e. the file isn't a valid MLP.h model or was written
+by an incompatible version), or if any read is short/fails — on failure
+`*net` is left zeroed rather than partially populated.
+
+### `MLP_GetLastError`
+
+```c
+MLP_Error MLP_GetLastError(void);
+```
+
+Returns the `MLP_Error` set by the most recently failed public API call.
+Starts as `MLP_OK` and is only ever updated on failure — a successful
+call does not reset it back to `MLP_OK`, so check function return values
+first and treat this as "the reason for the last failure," not "the
+current status."
+
+### `MLP_ErrorString`
+
+```c
+const char *MLP_ErrorString(MLP_Error err);
+```
+
+Returns a static, human-readable description of `err` (e.g. `"Memory
+allocation failed"`). Typically called as
+`MLP_ErrorString(MLP_GetLastError())` right after a function returns
+`false`/zeroed. Unknown values return `"Unknown error"`.
 
 ## Notes on the private API
 
