@@ -16,12 +16,17 @@
 #define MLP_H
 
 #define MLP_VERSION_MAJOR 0
-#define MLP_VERSION_MINOR 2
+#define MLP_VERSION_MINOR 3
 #define MLP_VERSION_PATCH 0
-#define MLP_VERSION_STRING "0.2.0"
+#define MLP_VERSION_STRING "0.3.0"
 
 #define MLP_MAGIC   0x4D4C5031u /* "MLP1" */
 #define MLP_VERSION 1u
+
+
+#ifndef MLP_CSV_LINE_BUFFER
+#define MLP_CSV_LINE_BUFFER 1024    // Size of the temporary buffer used to read one CSV line
+#endif
 
 /*=============================================================================
     Standard Library
@@ -51,6 +56,12 @@ typedef enum {
     MLP_ERR_FILE_READ,           // A read from a file failed or was truncated
     MLP_ERR_FILE_WRITE,          // A write to a file failed or was truncated
     MLP_ERR_FILE_FORMAT,         // File contents did not match the expected format (bad magic/version)
+
+    MLP_ERR_CSV_EMPTY,           // CSV contains no data rows.
+    MLP_ERR_CSV_INVALID_NUMBER,  // A field is not a valid floating-point number.
+    MLP_ERR_CSV_COLUMN_COUNT,    // A row has an unexpected number of columns.
+    MLP_ERR_CSV_LINE_TOO_LONG,   // A CSV line exceeded the internal buffer size.
+    MLP_ERR_CSV_HEADER,          // Invalid or missing CSV header.
  
     MLP_ERR_COUNT                // Sentinel: number of error codes, not a real error
 } MLP_Error;
@@ -129,6 +140,14 @@ static bool MLP_Load_Network(Network *net, const char *filename);
 static const char *MLP_ErrorString(MLP_Error err);
 static MLP_Error   MLP_GetLastError(void);
 
+static Dataset MLP_LoadCSV(
+    const char *filename,
+    size_t max_samples,
+    size_t n_features,
+    size_t n_outputs,
+    bool has_header
+);
+static void MLP_Destroy_Dataset(Dataset *d);
 
 /*=============================================================================
     Private API
@@ -170,6 +189,13 @@ static MLP_Error _mlp_last_error = MLP_OK;
 static inline void _mlp_set_error(MLP_Error err){
     _mlp_last_error = err;
 }
+
+static void _exit_on_failure(){
+    #ifdef MLP_EXIT_ON_ERROR
+        fprintf(stderr, "MLP Error: %s\n", MLP_ErrorString(_mlp_last_error));
+        exit(EXIT_FAILURE);
+    #endif
+}
  
 static MLP_Error MLP_GetLastError(void){
     return _mlp_last_error;
@@ -186,6 +212,13 @@ static const char *MLP_ErrorString(MLP_Error err){
         case MLP_ERR_FILE_READ:           return "Failed to read file (unexpected EOF or I/O error)";
         case MLP_ERR_FILE_WRITE:          return "Failed to write file (disk full or I/O error)";
         case MLP_ERR_FILE_FORMAT:         return "File is not a valid MLP model file";
+
+        case MLP_ERR_CSV_EMPTY:           return "CSV file contains no data rows";
+        case MLP_ERR_CSV_INVALID_NUMBER:  return "CSV contains an invalid numeric value";
+        case MLP_ERR_CSV_COLUMN_COUNT:    return "CSV row has an incorrect number of columns";
+        case MLP_ERR_CSV_LINE_TOO_LONG:   return "CSV line exceeds the maximum supported length";
+        case MLP_ERR_CSV_HEADER:          return "CSV header is missing or invalid";
+
         default:                          return "Unknown error";
     }
 }
@@ -284,6 +317,7 @@ static _Workspace _Workspace_Create(const Network *net){
         }
 
         _mlp_set_error(MLP_ERR_ALLOC_FAILED);
+        _exit_on_failure();
         return (_Workspace){0};
 }
 
@@ -390,10 +424,12 @@ static Dataset MLP_Create_Dataset(
 ){
     if(!samples){
         _mlp_set_error(MLP_ERR_NULL_POINTER);
+        _exit_on_failure();
         return (Dataset){0};
     }
     if(n_samples == 0 || n_features == 0){
         _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
+        _exit_on_failure();
         return (Dataset){0};
     }
 
@@ -411,16 +447,19 @@ static Network MLP_Create_Network(const size_t *topology, const size_t topology_
 
     if(!topology){
         _mlp_set_error(MLP_ERR_NULL_POINTER);
+        _exit_on_failure();
         return net;
     }
     if(topology_size < 2){
         _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
+        _exit_on_failure();
         return net;
     }
 
     for (size_t i = 0; i < topology_size; ++i)
         if (topology[i] == 0){
             _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
+            _exit_on_failure();
             return net;
         }
 
@@ -429,6 +468,7 @@ static Network MLP_Create_Network(const size_t *topology, const size_t topology_
     net.layers = calloc(net.n_layers, sizeof *net.layers);
     if(!net.layers){
         _mlp_set_error(MLP_ERR_ALLOC_FAILED);
+        _exit_on_failure();
         return (Network){0};
     }
 
@@ -464,6 +504,7 @@ static Network MLP_Create_Network(const size_t *topology, const size_t topology_
     fail:
         MLP_Destroy_Network(&net);
         _mlp_set_error(MLP_ERR_ALLOC_FAILED);
+        _exit_on_failure();
         return (Network){0};
 }
 
@@ -535,22 +576,27 @@ static bool MLP_Train(
 ){
     if(!net || !net->layers || net->n_layers == 0){
         _mlp_set_error(MLP_ERR_NULL_POINTER);
+        _exit_on_failure();
         return false;
     }
     if(!d || !d->samples || !d->output){
         _mlp_set_error(MLP_ERR_NULL_POINTER);
+        _exit_on_failure();
         return false;
     }
     if(!options){
         _mlp_set_error(MLP_ERR_NULL_POINTER);
+        _exit_on_failure();
         return false;
     }
     if(net->layers[0].inputs != d->n_features){
         _mlp_set_error(MLP_ERR_SHAPE_MISMATCH);
+        _exit_on_failure();
         return false;
     }
     if(net->layers[net->n_layers - 1].neurons != d->n_outputs){
         _mlp_set_error(MLP_ERR_SHAPE_MISMATCH);
+        _exit_on_failure();
         return false;
     }
 
@@ -617,22 +663,27 @@ static bool MLP_Train(
 static bool MLP_Predict_Dataset(const Network *net, const Dataset *d, double *buf){
     if(!net || !net->layers || net->n_layers == 0){
         _mlp_set_error(MLP_ERR_NULL_POINTER);
+        _exit_on_failure();
         return false;
     }
     if(!d || !d->samples){
         _mlp_set_error(MLP_ERR_NULL_POINTER);
+        _exit_on_failure();
         return false;
     }
     if(!buf){
         _mlp_set_error(MLP_ERR_NULL_POINTER);
+        _exit_on_failure();
         return false;
     }
     if(net->layers[0].inputs != d->n_features){
         _mlp_set_error(MLP_ERR_SHAPE_MISMATCH);
+        _exit_on_failure();
         return false;
     }
     if(net->layers[net->n_layers - 1].neurons != d->n_outputs){
         _mlp_set_error(MLP_ERR_SHAPE_MISMATCH);
+        _exit_on_failure();
         return false;
     }
 
@@ -672,12 +723,14 @@ static void MLP_Destroy_Network(Network *net){
 static bool MLP_Save_Network(const Network *net, const char *filename){
     if(!net || !net->layers || !filename){
         _mlp_set_error(MLP_ERR_NULL_POINTER);
+        _exit_on_failure();
         return false;
     }
 
     FILE *fp = fopen(filename, "wb");
     if(!fp){
         _mlp_set_error(MLP_ERR_FILE_OPEN);
+        _exit_on_failure();
         return false;
     }
 
@@ -722,6 +775,7 @@ static bool MLP_Save_Network(const Network *net, const char *filename){
         fclose(fp);
         remove(filename);
         _mlp_set_error(MLP_ERR_FILE_WRITE);
+        _exit_on_failure();
         return false;
 }
 
@@ -813,7 +867,159 @@ static bool MLP_Load_Network(Network *net, const char *filename){
     fail:
         fclose(fp);
         MLP_Destroy_Network(net);
+        _exit_on_failure();
         return false;
+}
+
+
+static Dataset MLP_LoadCSV(
+    const char *filename,
+    size_t max_samples,
+    size_t n_features,
+    size_t n_outputs,
+    bool has_header
+){
+    Dataset d = {0};
+
+    if(!filename){
+        _mlp_set_error(MLP_ERR_NULL_POINTER);
+        _exit_on_failure();
+        return d;
+    }
+    if(n_features == 0 || max_samples == 0){
+        _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
+        _exit_on_failure();
+        return d;
+    }
+    if(max_samples > SIZE_MAX / n_features / sizeof *d.samples){
+        _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
+        _exit_on_failure();
+        return d;
+    }
+    if(n_outputs && max_samples > SIZE_MAX / n_outputs / sizeof *d.output){
+        _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
+        _exit_on_failure();
+        return d;
+    }
+
+    FILE *fp = fopen(filename, "r");
+    if(!fp){
+        _mlp_set_error(MLP_ERR_FILE_OPEN);
+        _exit_on_failure();
+        return d;
+    }
+
+    d.samples = malloc(max_samples * n_features * sizeof *d.samples);
+    if(!d.samples){
+        _mlp_set_error(MLP_ERR_ALLOC_FAILED);
+        goto fail;
+    }
+
+    if(n_outputs){
+        d.output = malloc(max_samples * n_outputs * sizeof *d.output);
+        if(!d.output){
+            _mlp_set_error(MLP_ERR_ALLOC_FAILED);
+            goto fail;
+        }
+    }
+
+    char line[MLP_CSV_LINE_BUFFER];
+
+    if(has_header && !fgets(line, sizeof line, fp)){
+        _mlp_set_error(MLP_ERR_CSV_HEADER);
+        goto fail;
+    }
+
+    size_t sample = 0;
+    const size_t expected = n_features + n_outputs;
+
+    while(sample < max_samples && fgets(line, sizeof line, fp)){
+
+        if(!strchr(line, '\n') && !feof(fp)){
+            _mlp_set_error(MLP_ERR_CSV_LINE_TOO_LONG);
+            goto fail;
+        }
+
+        size_t col = 0;
+        char *token = strtok(line, ",\n\r");
+
+        while(token){
+            char *end;
+            double val = strtod(token, &end);
+
+            if(end == token || *end != '\0'){
+                _mlp_set_error(MLP_ERR_CSV_INVALID_NUMBER);
+                goto fail;
+            }
+
+            if(col >= expected){
+                _mlp_set_error(MLP_ERR_CSV_COLUMN_COUNT);
+                goto fail;
+            }
+
+            if(col < n_features)
+                d.samples[sample * n_features + col] = val;
+            else
+                d.output[sample * n_outputs + (col - n_features)] = val;
+
+            ++col;
+            token = strtok(NULL, ",\n\r");
+        }
+
+        if(col != expected){
+            _mlp_set_error(MLP_ERR_CSV_COLUMN_COUNT);
+            goto fail;
+        }
+
+        ++sample;
+    }
+
+    if(sample == 0){
+        _mlp_set_error(MLP_ERR_CSV_EMPTY);
+        goto fail;
+    }
+
+    if(ferror(fp)){
+        _mlp_set_error(MLP_ERR_FILE_READ);
+        goto fail;
+    }
+
+    if(sample < max_samples){
+        double *tmp = realloc(d.samples, sample * n_features * sizeof *d.samples);
+        if(tmp)
+            d.samples = tmp;
+    }
+
+    if(n_outputs && sample < max_samples){
+        double *tmp = realloc(d.output, sample * n_outputs * sizeof *d.output);
+        if(tmp)
+            d.output = tmp;
+    }
+
+    d.n_samples = sample;
+    d.n_features = n_features;
+    d.n_outputs = n_outputs;
+
+    fclose(fp);
+    return d;
+
+    fail:
+        free(d.samples);
+        free(d.output);
+
+        if(fp)
+            fclose(fp);
+        _exit_on_failure();
+        return (Dataset){0};
+}
+
+static void MLP_Destroy_Dataset(Dataset *d){
+    if (!d)
+        return;
+
+    free(d->samples);
+    free(d->output);
+    *d = (Dataset){0};
 }
 
 #endif /* MLP_IMPLEMENTATION */
