@@ -68,12 +68,12 @@ typedef struct {
 } TrainOptions;
 
 typedef struct {
-    const double *samples; // Flattened: samples x features
-    double *output;        // Flattened: samples x n_outputs (may be NULL for prediction-only datasets)
+    double *samples; // Flattened: samples x features
+    double *output;  // Flattened: samples x n_outputs (may be NULL for prediction-only datasets)
 
-    const size_t n_samples; 
-    const size_t n_features;
-    const size_t n_outputs;
+    size_t n_samples; 
+    size_t n_features;
+    size_t n_outputs;
 } Dataset;
 
 typedef struct {
@@ -107,11 +107,11 @@ typedef struct {
 =============================================================================*/
 
 static Dataset MLP_Create_Dataset(
-    const double *samples, 
+    double *samples, 
     double *output, 
-    const size_t n_samples, 
-    const size_t n_features,
-    const size_t n_outputs
+    size_t n_samples, 
+    size_t n_features,
+    size_t n_outputs
 );
 
 static TrainOptions MLP_DefaultTrainOptions(void);
@@ -382,11 +382,11 @@ static TrainOptions MLP_DefaultTrainOptions(void){
 }
 
 static Dataset MLP_Create_Dataset(
-    const double *samples, 
+    double *samples, 
     double *output, 
-    const size_t n_samples, 
-    const size_t n_features,
-    const size_t n_outputs
+    size_t n_samples, 
+    size_t n_features,
+    size_t n_outputs
 ){
     if(!samples){
         _mlp_set_error(MLP_ERR_NULL_POINTER);

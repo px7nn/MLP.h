@@ -74,12 +74,12 @@ Get sane defaults with `MLP_DefaultTrainOptions()`.
 
 ```c
 typedef struct {
-    const double *samples; // Flattened: samples x features
+    double *samples; // Flattened: samples x features
     double *output;        // Flattened: samples x n_outputs (may be NULL)
 
-    const size_t n_samples;
-    const size_t n_features;
-    const size_t n_outputs;
+    size_t n_samples;
+    size_t n_features;
+    size_t n_outputs;
 } Dataset;
 ```
 
@@ -116,7 +116,7 @@ matrix: `weights[j * inputs + k]` is the weight from input `k` to neuron
 
 ```c
 Dataset MLP_Create_Dataset(
-    const double *samples,
+    double *samples,
     double *output,
     size_t n_samples,
     size_t n_features,
