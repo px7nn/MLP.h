@@ -92,7 +92,7 @@ int main(void) {
     MLP_View_Dataset(&test);
 
     /* Save the trained model. */
-    if (!MLP_Save(&net, "xor.mlp")) {
+    if (!MLP_Save_Network(&net, "xor.mlp")) {
         printf("Save failed: %s\n",
             MLP_ErrorString(MLP_GetLastError()));
         MLP_Destroy_Network(&net);

@@ -123,8 +123,8 @@ static bool    MLP_Train(Network *net, const Dataset *d, const TrainOptions *opt
 static bool    MLP_Predict_Dataset(const Network *net, const Dataset *d, double *buf);
 static void    MLP_Destroy_Network(Network *net);
 
-static bool MLP_Save(const Network *net, const char *filename);
-static bool MLP_Load(Network *net, const char *filename);
+static bool MLP_Save_Network(const Network *net, const char *filename);
+static bool MLP_Load_Network(Network *net, const char *filename);
 
 static const char *MLP_ErrorString(MLP_Error err);
 static MLP_Error   MLP_GetLastError(void);
@@ -669,7 +669,7 @@ static void MLP_Destroy_Network(Network *net){
 }
 
 
-static bool MLP_Save(const Network *net, const char *filename){
+static bool MLP_Save_Network(const Network *net, const char *filename){
     if(!net || !net->layers || !filename){
         _mlp_set_error(MLP_ERR_NULL_POINTER);
         return false;
@@ -725,7 +725,7 @@ static bool MLP_Save(const Network *net, const char *filename){
         return false;
 }
 
-static bool MLP_Load(Network *net, const char *filename){
+static bool MLP_Load_Network(Network *net, const char *filename){
     if(!net || !filename){
         _mlp_set_error(MLP_ERR_NULL_POINTER);
         return false;

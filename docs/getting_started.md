@@ -74,7 +74,7 @@ Once trained, a network can be written to disk and loaded back later
 without retraining:
 
 ```c
-if (!MLP_Save(&net, "xor.mlp")) {
+if (!MLP_Save_Network(&net, "xor.mlp")) {
     printf("Save failed: %s\n", MLP_ErrorString(MLP_GetLastError()));
 }
 ```
@@ -82,12 +82,12 @@ if (!MLP_Save(&net, "xor.mlp")) {
 ```c
 Network loaded = {0};
 
-if (!MLP_Load(&loaded, "xor.mlp")) {
+if (!MLP_Load_Network(&loaded, "xor.mlp")) {
     printf("Load failed: %s\n", MLP_ErrorString(MLP_GetLastError()));
 }
 ```
 
-`MLP_Load` allocates everything it needs, so `loaded` just needs to be
+`MLP_Load_Network` allocates everything it needs, so `loaded` just needs to be
 zero-initialized (or a network you're fine seeing destroyed and
 replaced) before the call.
 

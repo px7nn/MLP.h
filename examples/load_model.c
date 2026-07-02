@@ -50,7 +50,7 @@ int main(void)
     Network net = {0};
 
     /* Load the previously trained model. */
-    if (!MLP_Load(&net, "xor.mlp")) {
+    if (!MLP_Load_Network(&net, "xor.mlp")) {
         printf("Failed to load model: %s\n",
                MLP_ErrorString(MLP_GetLastError()));
         return 1;

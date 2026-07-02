@@ -19,7 +19,7 @@ including the header.
 `MLP_VERSION_*`/`MLP_VERSION_STRING` describe the library release (see
 [Versioning](../README.md#versioning) in the README). `MLP_MAGIC` and
 `MLP_VERSION` are separate — they identify the on-disk **model file
-format** used by `MLP_Save`/`MLP_Load`, and only change when that binary
+format** used by `MLP_Save_Network`/`MLP_Load_Network`, and only change when that binary
 format changes, independently of the library's own version number.
 
 ## Types
@@ -192,10 +192,10 @@ void MLP_Destroy_Network(Network *net);
 Frees all layer weights/biases and the layer array, then zeroes `net`.
 Safe to call on an already-destroyed or zero-initialized `Network`.
 
-### `MLP_Save`
+### `MLP_Save_Network`
 
 ```c
-bool MLP_Save(const Network *net, const char *filename);
+bool MLP_Save_Network(const Network *net, const char *filename);
 ```
 
 Writes `net` to `filename` in the library's binary model format (magic
@@ -205,13 +205,13 @@ if `net`/`net->layers`/`filename` is NULL, or if any file write fails —
 on write failure the partially-written file is deleted. Overwrites
 `filename` if it already exists.
 
-### `MLP_Load`
+### `MLP_Load_Network`
 
 ```c
-bool MLP_Load(Network *net, const char *filename);
+bool MLP_Load_Network(Network *net, const char *filename);
 ```
 
-Reads a model previously written by `MLP_Save()` from `filename` and
+Reads a model previously written by `MLP_Save_Network()` from `filename` and
 populates `net`, allocating the layer array and each layer's
 weights/biases. `net` may point to a zero-initialized `Network` or an
 existing one — either way, any network `*net` currently holds is
