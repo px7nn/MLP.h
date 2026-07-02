@@ -8,9 +8,9 @@ including the header.
 
 ```c
 #define MLP_VERSION_MAJOR 0
-#define MLP_VERSION_MINOR 2
+#define MLP_VERSION_MINOR 3
 #define MLP_VERSION_PATCH 0
-#define MLP_VERSION_STRING "0.2.0"
+#define MLP_VERSION_STRING "0.3.0"
 
 #define MLP_MAGIC   0x4D4C5031u /* "MLP1" */
 #define MLP_VERSION 1u
@@ -21,6 +21,29 @@ including the header.
 `MLP_VERSION` are separate — they identify the on-disk **model file
 format** used by `MLP_Save_Network`/`MLP_Load_Network`, and only change when that binary
 format changes, independently of the library's own version number.
+
+## Configuration macros
+
+These may be `#define`d before including `MLP.h` to change library
+behavior. Define them consistently across every translation unit that
+includes the header.
+
+```c
+#define MLP_EXIT_ON_ERROR   // opt-in: abort on any public API failure
+#define MLP_CSV_LINE_BUFFER 1024  // size of the internal CSV line buffer
+```
+
+- **`MLP_EXIT_ON_ERROR`** — if defined, every public API function that
+  would otherwise set an error code and return `false`/a zeroed struct
+  instead prints `MLP_ErrorString()` for the failure to `stderr` and
+  calls `exit(EXIT_FAILURE)`. Useful for small programs/examples that
+  don't want to check every return value; leave it undefined for
+  libraries or applications that need to recover from errors.
+- **`MLP_CSV_LINE_BUFFER`** — size in bytes of the stack buffer
+  `MLP_LoadCSV()` uses to read one line at a time. Defaults to `1024`.
+  A row longer than this (including its newline) fails with
+  `MLP_ERR_CSV_LINE_TOO_LONG`; raise this value if your CSV has very
+  wide rows. Must be defined (if at all) before including `MLP.h`.
 
 ## Types
 
@@ -40,6 +63,12 @@ typedef enum {
     MLP_ERR_FILE_WRITE,          // A write to a file failed or was truncated
     MLP_ERR_FILE_FORMAT,         // File contents did not match the expected format (bad magic/version)
 
+    MLP_ERR_CSV_EMPTY,           // CSV contains no data rows.
+    MLP_ERR_CSV_INVALID_NUMBER,  // A field is not a valid floating-point number.
+    MLP_ERR_CSV_COLUMN_COUNT,    // A row has an unexpected number of columns.
+    MLP_ERR_CSV_LINE_TOO_LONG,   // A CSV line exceeded the internal buffer size.
+    MLP_ERR_CSV_HEADER,          // Invalid or missing CSV header.
+
     MLP_ERR_COUNT                // Sentinel: number of error codes, not a real error
 } MLP_Error;
 ```
@@ -49,6 +78,12 @@ error" on failure, retrievable with `MLP_GetLastError()`. Functions that
 return a struct by value (`Dataset`, `Network`) signal failure by
 returning a zeroed struct — check that, then consult
 `MLP_GetLastError()` for the reason.
+
+The `MLP_ERR_CSV_*` codes are only ever set by `MLP_LoadCSV()`; see that
+function's entry below for what triggers each one. If `MLP_EXIT_ON_ERROR`
+is defined, none of this matters for control flow — the process exits
+before the error code would need to be checked — but `MLP_GetLastError()`
+still reflects the failure in the `stderr` message printed on the way out.
 
 ### `TrainOptions`
 
@@ -83,11 +118,17 @@ typedef struct {
 } Dataset;
 ```
 
-A `Dataset` does not own or copy `samples`/`output` — it just holds
-pointers into memory you manage. `output` may be `NULL` for
-prediction-only datasets. Construct with `MLP_Create_Dataset`, never
-directly (the `const` shape fields make direct initialization awkward and
-`MLP_Create_Dataset` validates inputs).
+A `Dataset` built with `MLP_Create_Dataset` does not own or copy
+`samples`/`output` — it just holds pointers into memory you manage, and
+you're responsible for freeing that memory yourself. `output` may be
+`NULL` for prediction-only datasets. Prefer constructing with
+`MLP_Create_Dataset` rather than initializing the struct directly, since
+it validates its inputs.
+
+The exception is `MLP_LoadCSV()`: it heap-allocates `samples`/`output`
+itself, and the resulting `Dataset` **must** be freed with
+`MLP_Destroy_Dataset()` rather than `free()`d or manually managed — don't
+mix the two allocation styles for the same `Dataset`.
 
 ### `Layer` / `Network`
 
@@ -221,6 +262,65 @@ opened, if the magic number or version doesn't match (`MLP_MAGIC`,
 `MLP_VERSION` — i.e. the file isn't a valid MLP.h model or was written
 by an incompatible version), or if any read is short/fails — on failure
 `*net` is left zeroed rather than partially populated.
+
+### `MLP_LoadCSV`
+
+```c
+Dataset MLP_LoadCSV(
+    const char *filename,
+    size_t max_samples,
+    size_t n_features,
+    size_t n_outputs,
+    bool has_header
+);
+```
+
+Reads up to `max_samples` rows from a comma-separated `filename` into a
+newly heap-allocated `Dataset`. Each row must have exactly
+`n_features + n_outputs` numeric columns: the first `n_features` become
+`samples`, the remaining `n_outputs` become `output`. If `n_outputs` is
+`0`, `output` stays `NULL` (useful for prediction-only CSVs). Set
+`has_header` to `true` to skip the first line.
+
+Rows are read one at a time into a stack buffer sized
+`MLP_CSV_LINE_BUFFER` (`1024` bytes by default, overridable — see
+[Configuration macros](#configuration-macros)). If fewer than
+`max_samples` rows are actually present, the backing arrays are
+`realloc`'d down to the exact row count on success.
+
+Returns a zeroed `Dataset` on failure, with `MLP_GetLastError()` set to
+one of:
+
+| Cause                                   | Error                          |
+|------------------------------------------|--------------------------------|
+| `filename` is `NULL`                     | `MLP_ERR_NULL_POINTER`         |
+| `n_features` or `max_samples` is `0`, or the requested size overflows `size_t` | `MLP_ERR_INVALID_ARGUMENT` |
+| File can't be opened                     | `MLP_ERR_FILE_OPEN`            |
+| Allocation of `samples`/`output` fails   | `MLP_ERR_ALLOC_FAILED`         |
+| `has_header` is true but the file has no first line | `MLP_ERR_CSV_HEADER` |
+| A line (including its newline) exceeds `MLP_CSV_LINE_BUFFER` | `MLP_ERR_CSV_LINE_TOO_LONG` |
+| A field doesn't parse as a valid `double` | `MLP_ERR_CSV_INVALID_NUMBER`  |
+| A row has more or fewer than `n_features + n_outputs` columns | `MLP_ERR_CSV_COLUMN_COUNT` |
+| A read error occurs partway through the file | `MLP_ERR_FILE_READ`        |
+| The file has a header (or is otherwise consumed) but zero data rows | `MLP_ERR_CSV_EMPTY` |
+
+A `Dataset` returned by `MLP_LoadCSV()` must be released with
+`MLP_Destroy_Dataset()`, not `free()`.
+
+### `MLP_Destroy_Dataset`
+
+```c
+void MLP_Destroy_Dataset(Dataset *d);
+```
+
+Frees `d->samples` and `d->output` (either may be `NULL`) and zeroes
+`*d`. Use this to release a `Dataset` returned by `MLP_LoadCSV()`. Safe
+to call on an already-destroyed or zero-initialized `Dataset`, and a
+no-op if `d` itself is `NULL`.
+
+Do **not** call this on a `Dataset` built with `MLP_Create_Dataset` —
+that variant doesn't own its arrays, so `MLP_Destroy_Dataset` would free
+memory you're still responsible for managing yourself.
 
 ### `MLP_GetLastError`
 

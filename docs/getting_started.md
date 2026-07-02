@@ -43,6 +43,27 @@ Dataset d = MLP_Create_Dataset(X, Y, 4, 2, 1);
 `output` may be `NULL` for a dataset you only intend to predict on (no
 labels needed for inference).
 
+### Loading data from a CSV instead
+
+If your data already lives in a file, `MLP_LoadCSV` reads it directly
+into a `Dataset` — no manual array wrangling required. Each row must
+have exactly `n_features + n_outputs` numeric columns, features first:
+
+```c
+Dataset d = MLP_LoadCSV(
+    "circle.csv",
+    /* max_samples */ 26,
+    /* n_features  */ 2,
+    /* n_outputs   */ 1,
+    /* has_header  */ true
+);
+```
+
+Unlike `MLP_Create_Dataset`, this allocates its own `samples`/`output`
+arrays on the heap — free them with `MLP_Destroy_Dataset(&d)` (not
+`free()`) once you're done. See
+[`examples/load_csv.c`](../examples/load_csv.c) for a full example.
+
 ## 4. Train
 
 ```c
@@ -113,14 +134,39 @@ get a human-readable reason.
 MLP_Destroy_Network(&net);
 ```
 
-Datasets don't own their data (they just point at your arrays), so there's
-nothing to free there.
+A `Dataset` built with `MLP_Create_Dataset` doesn't own its data (it just
+points at your arrays), so there's nothing to free there. A `Dataset`
+returned by `MLP_LoadCSV`, on the other hand, *does* own heap-allocated
+arrays and must be released with `MLP_Destroy_Dataset`:
+
+```c
+MLP_Destroy_Dataset(&d);
+```
+
+## 9. Fail fast (optional)
+
+For small scripts where you'd rather not check every return value,
+define `MLP_EXIT_ON_ERROR` before including the header:
+
+```c
+#define MLP_EXIT_ON_ERROR
+#define MLP_IMPLEMENTATION
+#include "MLP.h"
+```
+
+With this defined, any public API call that would normally return
+`false`/a zeroed struct instead prints the error and calls
+`exit(EXIT_FAILURE)` immediately. Leave it undefined in code that needs
+to recover from errors instead of aborting.
 
 ## Full examples
 
-The [`examples/`](../examples/) directory has two runnable programs:
+The [`examples/`](../examples/) directory has three runnable programs:
 
 - [`xor_gate.c`](../examples/xor_gate.c) — trains a network on XOR from
   scratch and saves it to `xor.mlp`.
 - [`load_model.c`](../examples/load_model.c) — loads `xor.mlp` (run
   `xor_gate.c` first) and runs inference without retraining.
+- [`load_csv.c`](../examples/load_csv.c) — loads
+  [`datasets/circle.csv`](../datasets/circle.csv) with `MLP_LoadCSV`,
+  trains on it, predicts, and cleans up with `MLP_Destroy_Dataset`.
