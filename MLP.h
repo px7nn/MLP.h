@@ -8,7 +8,6 @@
     Usage: define MLP_IMPLEMENTATION in exactly one translation unit before
     including this header to pull in the implementation.
 
-    Version: 0.1.0
     License: MIT (see LICENSE)
 =============================================================================*/
 
