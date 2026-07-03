@@ -8,12 +8,12 @@ including the header.
 
 ```c
 #define MLP_VERSION_MAJOR 0
-#define MLP_VERSION_MINOR 3
+#define MLP_VERSION_MINOR 4
 #define MLP_VERSION_PATCH 0
-#define MLP_VERSION_STRING "0.3.0"
+#define MLP_VERSION_STRING "0.4.0"
 
-#define MLP_MAGIC   0x4D4C5031u /* "MLP1" */
-#define MLP_VERSION 1u
+#define MLP_MAGIC   0x4D4C5032u /* "MLP2" */
+#define MLP_VERSION 2u
 ```
 
 `MLP_VERSION_*`/`MLP_VERSION_STRING` describe the library release (see
@@ -21,6 +21,9 @@ including the header.
 `MLP_VERSION` are separate — they identify the on-disk **model file
 format** used by `MLP_Save_Network`/`MLP_Load_Network`, and only change when that binary
 format changes, independently of the library's own version number.
+`MLP_VERSION` was bumped to `2` in `0.4.0` because saved files now also
+store each layer's `Activation`; a `0.3.0` model file (`MLP_VERSION 1`)
+will fail to load with `MLP_ERR_FILE_FORMAT` — retrain and re-save it.
 
 ## Configuration macros
 
@@ -85,6 +88,46 @@ is defined, none of this matters for control flow — the process exits
 before the error code would need to be checked — but `MLP_GetLastError()`
 still reflects the failure in the `stderr` message printed on the way out.
 
+### `Activation`
+
+```c
+typedef enum {
+    ACT_LINEAR,
+    ACT_RELU,
+    ACT_LEAKY_RELU,
+    ACT_SIGMOID,
+
+    ACT_COUNT
+} Activation;
+```
+
+Per-layer activation function, set individually for every layer via
+`NetworkConfig.activations` (see `MLP_Create_Network` below).
+`ACT_LINEAR` applies no nonlinearity (`f(z) = z`) and is the usual choice
+for a regression output; `ACT_SIGMOID` squashes to `(0, 1)` and pairs
+naturally with `LOSS_BINARY_CROSS_ENTROPY` for binary classification.
+`ACT_COUNT` is a sentinel, not a real activation.
+
+### `Loss`
+
+```c
+typedef enum {
+    LOSS_MSE,
+    LOSS_BINARY_CROSS_ENTROPY,
+
+    LOSS_COUNT
+} Loss;
+```
+
+Set once per network via `NetworkConfig.loss`. `LOSS_MSE` (mean squared
+error) suits regression and works with any output activation.
+`LOSS_BINARY_CROSS_ENTROPY` is intended for a single sigmoid output
+representing a probability; `MLP_Train` combines it with `ACT_SIGMOID`
+using the standard simplified gradient (`pred - target`), so pairing
+`LOSS_BINARY_CROSS_ENTROPY` with a non-sigmoid output layer will train,
+but the gradient won't correspond to that loss's true derivative.
+`LOSS_COUNT` is a sentinel, not a real loss.
+
 ### `TrainOptions`
 
 ```c
@@ -130,26 +173,53 @@ itself, and the resulting `Dataset` **must** be freed with
 `MLP_Destroy_Dataset()` rather than `free()`d or manually managed — don't
 mix the two allocation styles for the same `Dataset`.
 
+### `NetworkConfig`
+
+```c
+typedef struct {
+    const size_t *topology;
+    const size_t topology_size;
+
+    const Activation *activations;
+    Loss loss;
+} NetworkConfig;
+```
+
+The input to `MLP_Create_Network`. `topology` lists unit counts from
+input to output, e.g. `{2, 8, 1}` for a 2-input, 8-hidden, 1-output
+network; `topology_size` is the length of that array (layer count + 1).
+`activations` has one entry per *connection* — `topology_size - 1`
+entries, i.e. one `Activation` per resulting `Layer` — so a 3-entry
+topology needs a 2-entry `activations` array. `loss` selects the
+training loss for the whole network (see `Loss` above).
+
 ### `Layer` / `Network`
 
 ```c
 typedef struct {
     double *weights; // Flattened: neurons * inputs
     double *biases;  // neurons
+
     size_t neurons;
     size_t inputs;
+
+    Activation activation;
 } Layer;
 
 typedef struct {
     Layer *layers;
     size_t n_layers;
+
+    Loss loss;
 } Network;
 ```
 
 Exposed mainly so `MLP_View_Network` and custom inspection code can walk
 the parameters directly. `weights` is a row-major `[neurons x inputs]`
 matrix: `weights[j * inputs + k]` is the weight from input `k` to neuron
-`j`.
+`j`. Each `Layer` carries its own `activation`, applied to that layer's
+output during the forward pass; `Network.loss` is the loss it was built
+with, used by `MLP_Train`.
 
 ## Functions
 
@@ -179,18 +249,33 @@ Returns `{ max_epochs: 1000, learning_rate: 1e-3, stop_loss: 1e-8, verbose: fals
 ### `MLP_Create_Network`
 
 ```c
-Network MLP_Create_Network(const size_t *topology, size_t n_layers);
+Network MLP_Create_Network(const NetworkConfig *cfg);
 ```
 
-`topology` lists unit counts from input to output, e.g. `{2, 8, 1}` for a
-2-input, 8-hidden, 1-output network. `n_layers` is the length of
-`topology` (despite the name, it's the topology array length, i.e.
-layer-count + 1). Requires `n_layers >= 2` and every topology entry > 0.
+> **Changed in 0.4.0:** this used to take a raw `(const size_t *topology,
+> size_t n_layers)` pair. It now takes a single `NetworkConfig`, which
+> adds per-layer activations and a selectable loss instead of a hardcoded
+> leaky-ReLU-hidden/linear-output/MSE network. See the
+> [0.4.0 changelog entry](../CHANGELOG.md) for the full rationale.
+
+Builds a `Network` from a `NetworkConfig` (see above). Requires
+`cfg`/`cfg->topology`/`cfg->activations` to be non-NULL,
+`cfg->topology_size >= 2`, every topology entry `> 0`, every
+`cfg->activations` entry `< ACT_COUNT`, and `cfg->loss < LOSS_COUNT`.
 Weights are randomly initialized in `[-1, 1]`; biases start at 0. Returns
 a zeroed `Network` on invalid input or allocation failure.
 
 Weight randomization uses `rand()`, uninitialized by the library — call
 `srand()` yourself if you want reproducible or non-deterministic runs.
+
+```c
+Network net = MLP_Create_Network(&(NetworkConfig){
+    .topology      = (size_t[]){ 2, 8, 1 },
+    .topology_size = 3,
+    .activations   = (Activation[]){ ACT_LEAKY_RELU, ACT_LINEAR },
+    .loss          = LOSS_MSE,
+});
+```
 
 ### `MLP_View_Network` / `MLP_View_Dataset`
 
@@ -208,11 +293,16 @@ Debug helpers that print weights/biases or a tabular data dump to
 bool MLP_Train(Network *net, const Dataset *d, const TrainOptions *options);
 ```
 
-Trains `net` in place via per-sample SGD backpropagation, minimizing mean
-squared error. Returns `false` if `net`, `d`, or `options` are invalid, if
-`d->output` is NULL, or if the dataset's feature/output counts don't
-match the network's input/output widths. Returns `true` on completion
-(including early stop via `stop_loss`).
+Trains `net` in place via per-sample SGD backpropagation, minimizing
+whichever `Loss` the network was created with (`net->loss` — see
+`NetworkConfig`). Returns `false` if `net`, `d`, or `options` are
+invalid, if `d->output` is NULL, or if the dataset's feature/output
+counts don't match the network's input/output widths. Returns `true` on
+completion (including early stop via `stop_loss`). Note that
+`stop_loss`/the printed loss are always in mean-squared-error terms
+regardless of `net->loss`, since `MLP_Train` accumulates squared error
+for its progress reporting independently of the loss used for the
+gradient.
 
 ### `MLP_Predict_Dataset`
 
@@ -241,7 +331,8 @@ bool MLP_Save_Network(const Network *net, const char *filename);
 
 Writes `net` to `filename` in the library's binary model format (magic
 number `MLP_MAGIC`, format version `MLP_VERSION`, followed by
-`n_layers` and each layer's shape, weights, and biases). Returns `false`
+`n_layers`, the network's `loss`, and each layer's shape, activation,
+weights, and biases). Returns `false`
 if `net`/`net->layers`/`filename` is NULL, or if any file write fails —
 on write failure the partially-written file is deleted. Overwrites
 `filename` if it already exists.

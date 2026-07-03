@@ -16,11 +16,18 @@ int main(){
         true
     );
 
-    Network n = MLP_Create_Network((size_t[]){N_FEATURES, 8, N_OUTPUTS}, 3);
+    NetworkConfig cfg = {
+        .topology      = (size_t[]){2, 8, 8, 1},
+        .topology_size = 4,
+        .activations = (Activation[]){ACT_LEAKY_RELU, ACT_LEAKY_RELU, ACT_SIGMOID},
+        .loss = LOSS_BINARY_CROSS_ENTROPY
+    };
+
+    Network n = MLP_Create_Network(&cfg);
 
     TrainOptions opt = MLP_DefaultTrainOptions();
     opt.verbose = true;
-    opt.max_epochs = 50000;
+    opt.max_epochs = 10000;
     opt.learning_rate = 1e-2;
 
     MLP_Train(&n, &d, &opt);

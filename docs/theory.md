@@ -11,11 +11,21 @@ A `Network` is a sequence of `Layer`s. Each layer fully connects its
 `inputs` to its `neurons`. For a topology `{2, 8, 1}`, `MLP_Create_Network`
 builds two `Layer`s: one mapping 2 -> 8, one mapping 8 -> 1.
 
-- **Hidden layers** use leaky ReLU: `f(z) = z if z > 0 else 0.01*z`
-  (`_ReLU` in the source).
-- **The output layer is always linear** — no activation applied. This
-  keeps the library usable for both regression (real-valued targets) and
-  classification (threshold or argmax the raw outputs yourself).
+Each layer's activation function is configured individually via
+`NetworkConfig.activations` (one entry per layer, i.e. `topology_size - 1`
+entries). Four are available:
+
+- `ACT_LINEAR` — `f(z) = z`. Typical choice for a regression output.
+- `ACT_RELU` — `f(z) = max(0, z)`.
+- `ACT_LEAKY_RELU` — `f(z) = z if z > 0 else 0.01*z`. A common default
+  for hidden layers; keeps a small gradient flowing when `z <= 0`, which
+  avoids plain ReLU's "dead neuron" failure mode without adding a
+  hyperparameter to tune.
+- `ACT_SIGMOID` — squashes to `(0, 1)`; pairs naturally with
+  `LOSS_BINARY_CROSS_ENTROPY` for binary classification output.
+
+There's no architectural restriction tying a particular activation to
+hidden vs. output layers — any layer can use any of the four.
 
 ## Forward pass (`_forward`)
 
@@ -24,8 +34,7 @@ vector `b`, and input activation vector `a`:
 
 ```
 z[j] = b[j] + sum_k W[j][k] * a[k]
-a'[j] = ReLU(z[j])          (hidden layers)
-a'[j] = z[j]                (output layer)
+a'[j] = f(z[j])          (f = that layer's configured Activation)
 ```
 
 The workspace (`_Workspace`) stores one activation vector per layer,
@@ -34,13 +43,25 @@ including a slot for the raw input (`activations[0]`), so
 
 ## Loss
 
-Mean squared error over each sample's outputs:
+Set once per network via `NetworkConfig.loss`:
+
+- **`LOSS_MSE`** — mean squared error, suits regression and works with
+  any output activation:
 
 ```
 L = (1/n_outputs) * sum_i (pred[i] - target[i])^2
 ```
 
-accumulated per-sample and averaged across the epoch in `MLP_Train`.
+- **`LOSS_BINARY_CROSS_ENTROPY`** — intended for a single `ACT_SIGMOID`
+  output representing a probability:
+
+  ```
+L = -(1/n_outputs) * sum_i [ target[i]*log(pred[i]) + (1-target[i])*log(1-pred[i]) ]
+  ```
+
+Note that `MLP_Train`'s `stop_loss`/progress reporting always accumulate
+plain squared error for tracking purposes, regardless of which `Loss`
+is actually driving the gradient — see `MLP_Train` in `docs/api.md`.
 
 ## Backward pass (`_backprop`)
 
@@ -48,18 +69,28 @@ Backprop computes a "delta" (error signal) per neuron, then that delta
 plus the corresponding upstream activation gives the gradient for each
 weight.
 
-**Output layer delta** is just the residual (since MSE's derivative w.r.t.
-a linear output simplifies to the plain error):
+**Output layer delta** depends on `net->loss`:
 
 ```
-delta_output[i] = pred[i] - target[i]
+LOSS_MSE:                   delta_output[i] = (pred[i] - target[i]) * f'(pred[i])
+LOSS_BINARY_CROSS_ENTROPY:  delta_output[i] = (pred[i] - target[i])
 ```
+
+where `f'` is the output layer's activation derivative. For
+`LOSS_MSE` this is the plain chain-rule derivative. For
+`LOSS_BINARY_CROSS_ENTROPY` the `f'(pred[i])` term cancels out of the true
+derivative when paired with a sigmoid output, leaving the simplified
+`pred - target` form — this is what `MLP_Train` computes regardless of
+what activation the output layer actually uses, so pairing
+`LOSS_BINARY_CROSS_ENTROPY` with a non-sigmoid output layer will still
+train, but the gradient won't correspond to that loss's true derivative.
 
 **Hidden layer delta** propagates the next layer's deltas backward through
-that layer's weights, then multiplies by the local activation derivative:
+that layer's weights, then multiplies by the local layer's own
+activation derivative:
 
 ```
-delta[i][j] = ReLU'(a[i][j]) * sum_k ( delta[i+1][k] * W_next[k][j] )
+delta[i][j] = f_i'(a[i][j]) * sum_k ( delta[i+1][k] * W_next[k][j] )
 ```
 
 The `_backprop` loop walks layers from output back to the first hidden
@@ -92,21 +123,14 @@ gradient descent, not batch gradient descent) — which is simple to reason
 about but means training speed and stability are sensitive to
 `learning_rate` and dataset ordering.
 
-## Why leaky ReLU?
-
-Plain ReLU can "die" (a neuron whose pre-activation is always negative
-stops learning entirely, since its gradient is always zero). The leaky
-variant (`0.01 * z` for `z <= 0`) keeps a small gradient flowing even in
-the negative region, which is a cheap way to avoid that failure mode
-without adding a hyperparameter to tune.
-
 ## Known limitations
 
 - No batching — every sample triggers an immediate weight update.
 - No regularization (L1/L2, dropout) or momentum-based optimizers.
-- No softmax/cross-entropy output stage — multi-class classification has to be done via one-hot MSE regression and
-  argmax, which works but isn't the theoretically ideal loss for
-  classification.
+- No softmax/cross-entropy output stage for multi-class problems — only
+  binary cross-entropy (single sigmoid output) is supported; multi-class
+  classification has to be done via one-hot MSE regression and argmax,
+  which works but isn't the theoretically ideal loss for that case.
 - Weight initialization is uniform in `[-1, 1]`, not scaled by fan-in/out
   (e.g. no Xavier/He initialization), so very deep or wide networks may
   be harder to train.

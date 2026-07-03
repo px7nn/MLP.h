@@ -16,17 +16,27 @@ the API can include `MLP.h` without the define.
 
 ## 2. Build a network
 
-`MLP_Create_Network` takes a topology array: the number of units in each
-layer, from input to output.
+`MLP_Create_Network` takes a `NetworkConfig`: a topology array (unit
+count per layer, from input to output), one `Activation` per layer, and
+a `Loss` to train against.
 
 ```c
-size_t topology[] = {2, 8, 1}; // 2 inputs -> 8 hidden -> 1 output
-Network net = MLP_Create_Network(topology, 3);
+NetworkConfig cfg = {
+    .topology      = (size_t[]){2, 8, 1}, // 2 inputs -> 8 hidden -> 1 output
+    .topology_size = 3,
+    .activations   = (Activation[]){ACT_LEAKY_RELU, ACT_LINEAR},
+    .loss          = LOSS_MSE,
+};
+
+Network net = MLP_Create_Network(&cfg);
 ```
 
-Hidden layers use a leaky ReLU activation; the output layer is always
-linear (no activation), which makes the library equally usable for
-regression and classification-via-thresholding.
+`activations` has one entry per *connection*, i.e. `topology_size - 1`
+entries — here that's "input->hidden" (`ACT_LEAKY_RELU`) and
+"hidden->output" (`ACT_LINEAR`). A linear, unactivated output works for
+both regression and classification-via-thresholding; for a probability
+output, use `ACT_SIGMOID` on the last layer paired with
+`LOSS_BINARY_CROSS_ENTROPY` (see [`examples/load_csv.c`](../examples/load_csv.c)).
 
 ## 3. Wrap your data in a Dataset
 
@@ -118,7 +128,7 @@ Every public function that can fail sets a retrievable error code
 instead of (or in addition to) returning `false`/a zeroed struct:
 
 ```c
-Network net = MLP_Create_Network(NULL, 3);
+Network net = MLP_Create_Network(NULL);
 if (!net.layers) {
     printf("%s\n", MLP_ErrorString(MLP_GetLastError()));
     // "A required argument was NULL"

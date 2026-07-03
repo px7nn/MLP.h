@@ -47,16 +47,14 @@ int main(void) {
     );
 
     /* Create a 2 → 5 → 1 network. */
-    const size_t topology[] = {
-        N_FEATURES,
-        5,
-        N_OUTPUTS
+    NetworkConfig cfg = {
+        .topology      = (size_t[]){2, 5, 1},
+        .topology_size = 3,
+        .activations = (Activation[]){ACT_LEAKY_RELU, ACT_LINEAR},
+        .loss = LOSS_MSE
     };
 
-    Network net = MLP_Create_Network(
-        topology,
-        sizeof(topology) / sizeof(topology[0])   // Number of entries in topology[]
-    );
+    Network net = MLP_Create_Network(&cfg);
 
     /* Configure training. */
     TrainOptions opt = MLP_DefaultTrainOptions();
