@@ -2,8 +2,7 @@
     MLP.h — A tiny single-header Multi-Layer Perceptron library in C
 
     A minimal, dependency-free feedforward neural network implementation
-    supporting arbitrary topologies, ReLU hidden activations, linear output,
-    and gradient-descent training via backpropagation on squared error loss.
+    supporting arbitrary topologies.
 
     Usage: define MLP_IMPLEMENTATION in exactly one translation unit before
     including this header to pull in the implementation.
@@ -15,21 +14,18 @@
 #define MLP_H
 
 #define MLP_VERSION_MAJOR 0
-#define MLP_VERSION_MINOR 3
+#define MLP_VERSION_MINOR 4
 #define MLP_VERSION_PATCH 0
-#define MLP_VERSION_STRING "0.3.0"
+#define MLP_VERSION_STRING "0.4.0"
 
-#define MLP_MAGIC   0x4D4C5031u /* "MLP1" */
-#define MLP_VERSION 1u
+#define MLP_MAGIC   0x4D4C5032u /* "MLP2" */
+#define MLP_VERSION 2u
 
 
 #ifndef MLP_CSV_LINE_BUFFER
 #define MLP_CSV_LINE_BUFFER 1024    // Size of the temporary buffer used to read one CSV line
 #endif
 
-/*=============================================================================
-    Standard Library
-=============================================================================*/
 
 #include <stddef.h>
 #include <stdlib.h>
@@ -38,10 +34,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-
-/*=============================================================================
-    Error Handling
-=============================================================================*/
 
 typedef enum {
     MLP_OK = 0,
@@ -66,9 +58,35 @@ typedef enum {
 } MLP_Error;
 
 
+typedef enum {
+    ACT_LINEAR,
+    ACT_RELU,
+    ACT_LEAKY_RELU,
+    ACT_SIGMOID,
+
+    ACT_COUNT
+} Activation;
+
+typedef enum {
+    LOSS_MSE,
+    LOSS_BINARY_CROSS_ENTROPY,
+
+    LOSS_COUNT
+} Loss;
+
+
 /*=============================================================================
     Public Data Structures
 =============================================================================*/
+
+typedef struct {
+    const size_t *topology;
+    const size_t topology_size;
+
+    const Activation *activations;
+    Loss loss;
+    
+} NetworkConfig;
 
 typedef struct {
     size_t max_epochs;
@@ -76,6 +94,7 @@ typedef struct {
     double stop_loss;
     bool verbose;
 } TrainOptions;
+
 
 typedef struct {
     double *samples; // Flattened: samples x features
@@ -92,11 +111,15 @@ typedef struct {
 
     size_t neurons;  // number of neurons in this layer (its output width)
     size_t inputs;   // number of inputs into this layer (previous layer's neuron count)
+
+    Activation activation;
 } Layer;
 
 typedef struct {
     Layer *layers;
     size_t n_layers;
+
+    Loss loss;
 } Network;
 
 
@@ -126,7 +149,7 @@ static Dataset MLP_Create_Dataset(
 
 static TrainOptions MLP_DefaultTrainOptions(void);
 
-static Network MLP_Create_Network(const size_t *topology, const size_t n_layers);
+static Network MLP_Create_Network(const NetworkConfig *cfg);
 static void    MLP_View_Network(const Network *net);
 static void    MLP_View_Dataset(const Dataset *d);
 static bool    MLP_Train(Network *net, const Dataset *d, const TrainOptions *options);
@@ -153,12 +176,24 @@ static void MLP_Destroy_Dataset(Dataset *d);
 =============================================================================*/
 
 static inline void _mlp_set_error(MLP_Error err);
-
 static void _print_summary(size_t epoch, size_t max_epochs, double loss, const char *reason);
 
+static inline double _pow(double base, unsigned int exp);
+static inline double _exponential(double x); // to avoid using math.h
 static inline double _random_weight(void);
+
+/* Activation funcs */
 static inline double _ReLU(double z);
+static inline double _Leaky_ReLU(double z);
+static inline double _Sigmoid(double z);
+static inline double _activation(double z, Activation act);
+
+
+/* Derivative funcs */
 static inline double _ReLU_derivative(double activation);
+static inline double _Leaky_ReLU_derivative(double activation);
+static inline double _Sigmoid_derivative(double activation);
+static inline double _activation_derivative(double activation, Activation act);
 
 
 static _Workspace _Workspace_Create(const Network *net);
@@ -249,17 +284,88 @@ static void _print_summary(size_t epoch, size_t max_epochs, double loss, const c
     }
 }
 
+static inline double _pow(double base, unsigned int exp){
+    double res = 1.0;
+    while(exp){
+        if(exp & 1)
+            res *= base;
+        base *= base;
+        exp >>= 1;
+    }
+    return res;
+}
 
+static inline double _exponential(double x){
+    if(x > 709.0)
+        return 1.7976931348623157e308;   /* Approx. DBL_MAX */
+    if(x < -709.0)
+        return 0.0;
+    
+    if (x < 0.0)
+        return 1.0 / _exponential(-x);
+    
+    const double e = 2.71828182845904523536;
+
+    unsigned int whole = (unsigned int)x;
+    double frac = x - (double)whole;
+
+    double res = _pow(e, whole);
+    
+    double term, sum;
+    term = sum = 1.0;
+
+    for(size_t i=1; i<=10; ++i){
+        term *= frac / (double)i;
+        sum += term;
+    }
+    return res * sum;
+}
 static inline double _random_weight(void){
     return (((double)rand() / RAND_MAX) * 2.0 - 1.0);
 }
 
 static inline double _ReLU(double z){
-    return (z > 0.0)? z : 0.01 * z;
+    return (z > 0.0)? z : 0;
+}
+static inline double _ReLU_derivative(double activation){
+    return (activation > 0.0)? 1.0 : 0;
 }
 
-static inline double _ReLU_derivative(double activation){
+static inline double _Leaky_ReLU(double z){
+    return (z > 0.0)? z : 0.01 * z;
+}
+static inline double _Leaky_ReLU_derivative(double activation){
     return (activation > 0.0)? 1.0 : 0.01;
+}
+
+static inline double _Sigmoid(double z){
+    return 1.0 / (1.0 + _exponential(-z));
+}
+static inline double _Sigmoid_derivative(double activation){
+    return activation * (1.0 - activation);
+}
+
+
+static inline double _activation(double z, Activation act){
+    switch(act){
+        case ACT_LINEAR:        return z;
+        case ACT_RELU:          return _ReLU(z);
+        case ACT_LEAKY_RELU:    return _Leaky_ReLU(z);
+        case ACT_SIGMOID:       return _Sigmoid(z);
+        default:                return z;
+    }
+    return z;
+}
+
+static inline double _activation_derivative(double activation, Activation act){
+    switch(act){
+        case ACT_LINEAR:        return 1.0;
+        case ACT_RELU:          return _ReLU_derivative(activation);
+        case ACT_LEAKY_RELU:    return _Leaky_ReLU_derivative(activation);
+        case ACT_SIGMOID:       return _Sigmoid_derivative(activation);
+        default:                return 1.0;
+    }
+    return 1.0;
 }
 
 
@@ -274,7 +380,7 @@ static _Workspace _Workspace_Create(const Network *net){
     ws.layers = net->n_layers + 1;
 
     ws.activations = calloc(ws.layers, sizeof *ws.activations);
-    ws.deltas     = calloc(ws.layers, sizeof *ws.deltas);
+    ws.deltas      = calloc(ws.layers, sizeof *ws.deltas);
 
     if(!ws.activations || !ws.deltas)
         goto fail;
@@ -357,10 +463,7 @@ static void _forward(
             for(size_t k=0; k < layer->inputs; ++k){
                 sum += layer->weights[j * layer->inputs + k] * input[k];
             }
-            if(i == net->n_layers - 1)
-                output[j] = sum;        // Linear Output
-            else
-                output[j] = _ReLU(sum); // Hidden Layers
+            output[j] = _activation(sum, layer->activation);
         }
     }
 }
@@ -376,7 +479,18 @@ static void _backprop(
     const Layer *output = &net->layers[net->n_layers - 1];
     for(size_t i=0; i<output->neurons; ++i){
         const double pred = ws->activations[last][i];
-        ws->deltas[last][i] = (pred - target[i]);
+        
+        switch(net->loss){
+            case LOSS_MSE: 
+                ws->deltas[last][i] = (pred - target[i]) * _activation_derivative(pred, output->activation);
+                break;
+            case LOSS_BINARY_CROSS_ENTROPY:
+                ws->deltas[last][i] = (pred - target[i]);
+                break;
+            default:
+                ws->deltas[last][i] = (pred - target[i]) * _activation_derivative(pred, output->activation);
+                break;
+        }
     }
 
     /* HIDDEN */
@@ -399,7 +513,7 @@ static void _backprop(
             for(size_t k = 0; k < next_layer->neurons; ++k)
                 sum += ws->deltas[i+1][k] * next_layer->weights[k * next_layer->inputs + j];
 
-            ws->deltas[i][j] = sum * _ReLU_derivative(ws->activations[i][j]); 
+            ws->deltas[i][j] = sum * _activation_derivative(ws->activations[i][j], net->layers[i-1].activation); //current layer's activation
         }
     }
 }
@@ -441,28 +555,45 @@ static Dataset MLP_Create_Dataset(
     };
 }
 
-static Network MLP_Create_Network(const size_t *topology, const size_t topology_size){
+static Network MLP_Create_Network(const NetworkConfig *cfg){
     Network net = {0};
 
-    if(!topology){
+    if(!cfg || !cfg->topology || !cfg->activations){
         _mlp_set_error(MLP_ERR_NULL_POINTER);
         _exit_on_failure();
         return net;
     }
-    if(topology_size < 2){
+
+    const size_t *topology = cfg->topology;
+    const size_t n_layers  = cfg->topology_size - 1;
+
+    if(cfg->topology_size < 2){
         _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
         _exit_on_failure();
         return net;
     }
 
-    for (size_t i = 0; i < topology_size; ++i)
+    for (size_t i = 0; i < cfg->topology_size; ++i)
         if (topology[i] == 0){
             _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
             _exit_on_failure();
             return net;
         }
+    for(size_t i = 0; i < n_layers; ++i)
+        if(cfg->activations[i] >= ACT_COUNT){
+            _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
+            _exit_on_failure();
+            return net;
+        }
+    
+    if(cfg->loss >= LOSS_COUNT){
+        _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
+        _exit_on_failure();
+        return net;
+    }
 
-    net.n_layers = topology_size - 1;
+    net.n_layers = n_layers;
+    net.loss     = cfg->loss;
 
     net.layers = calloc(net.n_layers, sizeof *net.layers);
     if(!net.layers){
@@ -477,14 +608,15 @@ static Network MLP_Create_Network(const size_t *topology, const size_t topology_
         layer->inputs  = topology[i];
         layer->neurons = topology[i + 1];
 
-        layer->weights = malloc(
-            layer->neurons * 
-            layer->inputs * 
+        layer->activation = cfg->activations[i];
+
+        layer->weights = calloc(
+            layer->neurons * layer->inputs, 
             sizeof *layer->weights
         );
 
-        layer->biases = malloc(
-            layer->neurons * 
+        layer->biases = calloc(
+            layer->neurons, 
             sizeof *layer->biases
         );
 
@@ -494,7 +626,6 @@ static Network MLP_Create_Network(const size_t *topology, const size_t topology_
         for(size_t j = 0; j < layer->neurons; j++){
             for(size_t k = 0; k < layer->inputs; k++)
                 layer->weights[j * layer->inputs + k] = _random_weight();
-            layer->biases[j] = 0.0;
         }
     }
 
@@ -714,8 +845,7 @@ static void MLP_Destroy_Network(Network *net){
         }
     free(net->layers);
 
-    net->layers = NULL;
-    net->n_layers = 0;
+    *net = (Network){0};
 }
 
 
@@ -744,12 +874,18 @@ static bool MLP_Save_Network(const Network *net, const char *filename){
     if(fwrite(&net->n_layers, sizeof net->n_layers, 1, fp) != 1)
         goto fail;
 
+    if(fwrite(&net->loss, sizeof net->loss, 1, fp) != 1)
+        goto fail;
+
     for(size_t i=0; i<net->n_layers; ++i){
         const Layer *layer = &net->layers[i];
 
         if(fwrite(&layer->neurons, sizeof layer->neurons, 1, fp) != 1)
             goto fail;
         if(fwrite(&layer->inputs,  sizeof layer->inputs,  1, fp) != 1)
+            goto fail;
+
+        if(fwrite(&layer->activation,  sizeof layer->activation,  1, fp) != 1)
             goto fail;
 
 
@@ -814,6 +950,15 @@ static bool MLP_Load_Network(Network *net, const char *filename){
         goto fail;
     }
 
+    if(fread(&net->loss, sizeof net->loss, 1, fp) != 1){
+        _mlp_set_error(MLP_ERR_FILE_READ);
+        goto fail;
+    }
+    if(net->loss >= LOSS_COUNT){
+        _mlp_set_error(MLP_ERR_FILE_FORMAT);
+        goto fail;
+    }
+
     net->layers = calloc(net->n_layers, sizeof *net->layers);
     if(!net->layers){
         _mlp_set_error(MLP_ERR_ALLOC_FAILED);
@@ -832,8 +977,17 @@ static bool MLP_Load_Network(Network *net, const char *filename){
             goto fail;
         }
 
-        layer->weights = malloc(layer->neurons * layer->inputs * sizeof *layer->weights);
-        layer->biases  = malloc(layer->neurons * sizeof *layer->biases);
+        if(fread(&layer->activation,  sizeof layer->activation,  1, fp) != 1){
+            _mlp_set_error(MLP_ERR_FILE_READ);
+            goto fail;
+        }
+        if(layer->activation >= ACT_COUNT){
+            _mlp_set_error(MLP_ERR_FILE_FORMAT);
+            goto fail;
+        }
+
+        layer->weights = calloc(layer->neurons * layer->inputs, sizeof *layer->weights);
+        layer->biases  = calloc(layer->neurons, sizeof *layer->biases);
 
         if(!layer->weights || !layer->biases){
             _mlp_set_error(MLP_ERR_ALLOC_FAILED);
