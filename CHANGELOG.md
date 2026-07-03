@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2026-07-03
+
+### Added
+- Configurable per-layer activations via `NetworkConfig.activations`:
+  `ACT_LINEAR`, `ACT_RELU`, `ACT_LEAKY_RELU`, `ACT_SIGMOID`.
+- Selectable training loss via `NetworkConfig.loss`: `LOSS_MSE`,
+  `LOSS_BINARY_CROSS_ENTROPY`. `MLP_Train`'s output-layer delta now
+  branches on `net->loss`, using the simplified `pred - target`
+  gradient for `LOSS_BINARY_CROSS_ENTROPY` (intended for a sigmoid
+  output).
+
+### Changed
+- **Breaking:** `MLP_Create_Network` now takes a single
+  `const NetworkConfig *cfg` (topology, activations, loss) instead of
+  a raw `(const size_t *topology, size_t n_layers)` pair, replacing
+  the previous hardcoded leaky-ReLU-hidden/linear-output/MSE network.
+- Saved model files now also store each layer's `Activation`, so
+  `MLP_VERSION` (the on-disk format version) was bumped from `1` to
+  `2`. A `0.3.0` model file will fail to load with
+  `MLP_ERR_FILE_FORMAT` — retrain and re-save it.
+
+### Docs
+- Updated `README.md`, `docs/api.md`, and `docs/getting_started.md`
+  for the `0.4.0` `NetworkConfig`-based API.
+
+---
+
 ## [0.3.0] - 2026-07-02
 
 ### Added
