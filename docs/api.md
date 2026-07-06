@@ -463,6 +463,6 @@ allocation failed"`). Typically called as
 ## Notes on the private API
 
 Everything prefixed `_` (`_forward`, `_backprop`, `_Workspace_*`,
-`_ReLU`, `_random_weight`, `_print_summary`) is implementation detail. It
+`_ReLU`, `_initialize_weight`, `_print_summary`) is implementation detail. It
 is declared `static` and not part of the stable API — signatures may
 change between versions without a deprecation notice.

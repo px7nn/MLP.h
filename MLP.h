@@ -26,7 +26,7 @@
 #define MLP_CSV_LINE_BUFFER 1024    // Size of the temporary buffer used to read one CSV line
 #endif
 
-#define LEN(ARR) sizeof(ARR) / size ARR[0]
+#define LEN(ARR) sizeof(ARR) / sizeof(ARR[0])
 
 
 #include <stddef.h>

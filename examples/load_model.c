@@ -44,7 +44,7 @@ int main(void)
     /*--------------------------------------------------------------
         Create an empty network.
 
-        MLP_Load() will allocate and populate the network using
+        MLP_Load_Network() will allocate and populate the network using
         the data stored in "xor.mlp".
     --------------------------------------------------------------*/
     Network net = {0};
