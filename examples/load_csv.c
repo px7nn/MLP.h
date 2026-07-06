@@ -20,7 +20,8 @@ int main(){
         .topology      = (size_t[]){2, 8, 8, 1},
         .topology_size = 4,
         .activations = (Activation[]){ACT_LEAKY_RELU, ACT_LEAKY_RELU, ACT_SIGMOID},
-        .loss = LOSS_BINARY_CROSS_ENTROPY
+        .loss = LOSS_BINARY_CROSS_ENTROPY,
+        .initializer = INIT_HE
     };
 
     Network n = MLP_Create_Network(&cfg);

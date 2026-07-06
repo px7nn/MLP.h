@@ -14,9 +14,9 @@
 #define MLP_H
 
 #define MLP_VERSION_MAJOR 0
-#define MLP_VERSION_MINOR 4
+#define MLP_VERSION_MINOR 5
 #define MLP_VERSION_PATCH 0
-#define MLP_VERSION_STRING "0.4.0"
+#define MLP_VERSION_STRING "0.5.0"
 
 #define MLP_MAGIC   0x4D4C5032u /* "MLP2" */
 #define MLP_VERSION 2u
@@ -25,6 +25,8 @@
 #ifndef MLP_CSV_LINE_BUFFER
 #define MLP_CSV_LINE_BUFFER 1024    // Size of the temporary buffer used to read one CSV line
 #endif
+
+#define LEN(ARR) sizeof(ARR) / size ARR[0]
 
 
 #include <stddef.h>
@@ -59,6 +61,15 @@ typedef enum {
 
 
 typedef enum {
+    INIT_RANDOM,
+    INIT_XAVIER,
+    INIT_HE,
+
+    INIT_COUNT
+} Initializer;
+
+
+typedef enum {
     ACT_LINEAR,
     ACT_RELU,
     ACT_LEAKY_RELU,
@@ -86,6 +97,7 @@ typedef struct {
     const Activation *activations;
     Loss loss;
     
+    const Initializer initializer;
 } NetworkConfig;
 
 typedef struct {
@@ -178,9 +190,10 @@ static void MLP_Destroy_Dataset(Dataset *d);
 static inline void _mlp_set_error(MLP_Error err);
 static void _print_summary(size_t epoch, size_t max_epochs, double loss, const char *reason);
 
+static inline double _sqrt(double x);
 static inline double _pow(double base, unsigned int exp);
 static inline double _exponential(double x); // to avoid using math.h
-static inline double _random_weight(void);
+static inline double _initialize_weight(const size_t inputs, const Initializer initializer);
 
 /* Activation funcs */
 static inline double _ReLU(double z);
@@ -284,6 +297,13 @@ static void _print_summary(size_t epoch, size_t max_epochs, double loss, const c
     }
 }
 
+static inline double _sqrt(double x){
+    if(x <= 0.0f) return 0.0f;
+    double y = x;
+    for(size_t i=0; i<5; ++i)
+        y = 0.5f * (y + x/y);
+    return y;
+}
 static inline double _pow(double base, unsigned int exp){
     double res = 1.0;
     while(exp){
@@ -320,8 +340,16 @@ static inline double _exponential(double x){
     }
     return res * sum;
 }
-static inline double _random_weight(void){
-    return (((double)rand() / RAND_MAX) * 2.0 - 1.0);
+static inline double _initialize_weight(const size_t input_count, const Initializer initializer){
+    double w= (((double)rand() / RAND_MAX) * 2.0 - 1.0);
+    switch(initializer){
+        case INIT_RANDOM: return w;
+        case INIT_XAVIER: return _sqrt(1 / (double)input_count) * w;
+        case INIT_HE:     return _sqrt(2 / (double)input_count) * w;
+
+        default:          return w;
+    }
+    return w;
 }
 
 static inline double _ReLU(double z){
@@ -586,7 +614,7 @@ static Network MLP_Create_Network(const NetworkConfig *cfg){
             return net;
         }
     
-    if(cfg->loss >= LOSS_COUNT){
+    if(cfg->loss >= LOSS_COUNT || cfg->initializer >= INIT_COUNT){
         _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
         _exit_on_failure();
         return net;
@@ -625,7 +653,7 @@ static Network MLP_Create_Network(const NetworkConfig *cfg){
 
         for(size_t j = 0; j < layer->neurons; j++){
             for(size_t k = 0; k < layer->inputs; k++)
-                layer->weights[j * layer->inputs + k] = _random_weight();
+                layer->weights[j * layer->inputs + k] = _initialize_weight(layer->inputs, cfg->initializer);
         }
     }
 

@@ -50,8 +50,9 @@ int main(void) {
     NetworkConfig cfg = {
         .topology      = (size_t[]){2, 5, 1},
         .topology_size = 3,
-        .activations = (Activation[]){ACT_LEAKY_RELU, ACT_LINEAR},
-        .loss = LOSS_MSE
+        .activations = (Activation[]){ACT_RELU, ACT_SIGMOID},
+        .loss = LOSS_BINARY_CROSS_ENTROPY,
+        .initializer = INIT_HE
     };
 
     Network net = MLP_Create_Network(&cfg);
