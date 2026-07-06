@@ -26,6 +26,7 @@ NetworkConfig cfg = {
     .topology_size = 3,
     .activations   = (Activation[]){ACT_LEAKY_RELU, ACT_LINEAR},
     .loss          = LOSS_MSE,
+    .initializer   = INIT_HE,
 };
 
 Network net = MLP_Create_Network(&cfg);
@@ -37,6 +38,11 @@ entries — here that's "input->hidden" (`ACT_LEAKY_RELU`) and
 both regression and classification-via-thresholding; for a probability
 output, use `ACT_SIGMOID` on the last layer paired with
 `LOSS_BINARY_CROSS_ENTROPY` (see [`examples/load_csv.c`](../examples/load_csv.c)).
+`initializer` selects the weight initialization strategy (`INIT_RANDOM` for
+uniform random in `[-1, 1]`, `INIT_XAVIER` for Xavier initialization, or
+`INIT_HE` for He initialization). Using `INIT_HE` or `INIT_XAVIER` scales initial
+weights by the number of inputs to the layer, helping deeper or wider networks
+train more stably.
 
 ## 3. Wrap your data in a Dataset
 

@@ -27,6 +27,21 @@ entries). Four are available:
 There's no architectural restriction tying a particular activation to
 hidden vs. output layers — any layer can use any of the four.
 
+## Weight initialization
+
+Initial weights are set by `_initialize_weight` based on the selected `Initializer` strategy in `NetworkConfig.initializer`:
+
+- **`INIT_RANDOM`**: Weights are initialized uniformly in `[-1, 1]`.
+- **`INIT_XAVIER`**: Xavier/Glorot initialization, scaling initial uniform weights by `sqrt(1 / inputs)`:  
+  `w[j][k] = sqrt(1 / inputs) * r` where `r ~ U(-1, 1)`.  
+  Useful for keeping signal variance stable across layers with linear or sigmoid activations.
+- **`INIT_HE`**: He/Kaiming initialization, scaling initial uniform weights by `sqrt(2 / inputs)`:  
+  `w[j][k] = sqrt(2 / inputs) * r` where `r ~ U(-1, 1)`.  
+  Recommended for ReLU and Leaky ReLU activations to account for zeroed-out negative activations.
+
+
+Biases for all layers are initialized to `0` regardless of the weight initializer.
+
 ## Forward pass (`_forward`)
 
 For layer `i`, with weight matrix `W` (shape `neurons x inputs`), bias
@@ -55,9 +70,9 @@ L = (1/n_outputs) * sum_i (pred[i] - target[i])^2
 - **`LOSS_BINARY_CROSS_ENTROPY`** — intended for a single `ACT_SIGMOID`
   output representing a probability:
 
-  ```
+```
 L = -(1/n_outputs) * sum_i [ target[i]*log(pred[i]) + (1-target[i])*log(1-pred[i]) ]
-  ```
+```
 
 Note that `MLP_Train`'s `stop_loss`/progress reporting always accumulate
 plain squared error for tracking purposes, regardless of which `Loss`
@@ -131,8 +146,5 @@ about but means training speed and stability are sensitive to
   binary cross-entropy (single sigmoid output) is supported; multi-class
   classification has to be done via one-hot MSE regression and argmax,
   which works but isn't the theoretically ideal loss for that case.
-- Weight initialization is uniform in `[-1, 1]`, not scaled by fan-in/out
-  (e.g. no Xavier/He initialization), so very deep or wide networks may
-  be harder to train.
 
 These are reasonable directions for future versions.

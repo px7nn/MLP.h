@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-07-06
+
+### Added
+- Support for different weight initializers via `NetworkConfig.initializer`:
+  - `INIT_RANDOM` (uniform random weights in `[-1, 1]`)
+  - `INIT_XAVIER` (Xavier initialization scaled by fan-in)
+  - `INIT_HE` (He initialization scaled by fan-in)
+- New `Initializer` enum and `INIT_COUNT` sentinel.
+- Internal math helper `_sqrt()` using Newton's method for calculating weight scales without including `math.h`.
+- Validation checks for initializers in `MLP_Create_Network`.
+
+### Changed
+- Updated default example files `examples/load_csv.c` and `examples/xor_gate.c` to use `INIT_HE` weight initialization.
+
+### Docs
+- Updated `README.md`, `docs/getting_started.md`, `docs/api.md`, and `docs/theory.md` to reflect version `0.5.0` and the new weight initialization options.
+
+---
+
 ## [0.4.0] - 2026-07-03
 
 ### Added

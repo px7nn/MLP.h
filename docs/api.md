@@ -8,9 +8,9 @@ including the header.
 
 ```c
 #define MLP_VERSION_MAJOR 0
-#define MLP_VERSION_MINOR 4
+#define MLP_VERSION_MINOR 5
 #define MLP_VERSION_PATCH 0
-#define MLP_VERSION_STRING "0.4.0"
+#define MLP_VERSION_STRING "0.5.0"
 
 #define MLP_MAGIC   0x4D4C5032u /* "MLP2" */
 #define MLP_VERSION 2u
@@ -128,6 +128,24 @@ using the standard simplified gradient (`pred - target`), so pairing
 but the gradient won't correspond to that loss's true derivative.
 `LOSS_COUNT` is a sentinel, not a real loss.
 
+### `Initializer`
+
+```c
+typedef enum {
+    INIT_RANDOM,
+    INIT_XAVIER,
+    INIT_HE,
+
+    INIT_COUNT
+} Initializer;
+```
+
+Weight initialization strategy, set for the network via `NetworkConfig.initializer`.
+- `INIT_RANDOM` — uniform random weights in `[-1, 1]`.
+- `INIT_XAVIER` — Xavier/Glorot initialization, scaling initial uniform weights by `sqrt(1 / inputs)`. Best suited for linear or sigmoid activations.
+- `INIT_HE` — He/Kaiming initialization, scaling initial uniform weights by `sqrt(2 / inputs)`. Best suited for ReLU or leaky ReLU activations.
+- `INIT_COUNT` — sentinel, not a real initializer strategy.
+
 ### `TrainOptions`
 
 ```c
@@ -182,6 +200,8 @@ typedef struct {
 
     const Activation *activations;
     Loss loss;
+
+    const Initializer initializer;
 } NetworkConfig;
 ```
 
@@ -191,7 +211,8 @@ network; `topology_size` is the length of that array (layer count + 1).
 `activations` has one entry per *connection* — `topology_size - 1`
 entries, i.e. one `Activation` per resulting `Layer` — so a 3-entry
 topology needs a 2-entry `activations` array. `loss` selects the
-training loss for the whole network (see `Loss` above).
+training loss for the whole network (see `Loss` above). `initializer` selects
+the weight initialization strategy (see `Initializer` above).
 
 ### `Layer` / `Network`
 
@@ -261,12 +282,14 @@ Network MLP_Create_Network(const NetworkConfig *cfg);
 Builds a `Network` from a `NetworkConfig` (see above). Requires
 `cfg`/`cfg->topology`/`cfg->activations` to be non-NULL,
 `cfg->topology_size >= 2`, every topology entry `> 0`, every
-`cfg->activations` entry `< ACT_COUNT`, and `cfg->loss < LOSS_COUNT`.
-Weights are randomly initialized in `[-1, 1]`; biases start at 0. Returns
-a zeroed `Network` on invalid input or allocation failure.
+`cfg->activations` entry `< ACT_COUNT`, `cfg->loss < LOSS_COUNT`, and
+`cfg->initializer < INIT_COUNT`. Weights are initialized according to the
+strategy configured in `cfg->initializer` (see `Initializer` above); biases
+start at 0. Returns a zeroed `Network` on invalid input or allocation failure.
 
-Weight randomization uses `rand()`, uninitialized by the library — call
-`srand()` yourself if you want reproducible or non-deterministic runs.
+Weight randomization (which forms the base or scale for the initializers)
+uses `rand()`, uninitialized by the library — call `srand()` yourself if
+you want reproducible or non-deterministic runs.
 
 ```c
 Network net = MLP_Create_Network(&(NetworkConfig){
@@ -274,6 +297,7 @@ Network net = MLP_Create_Network(&(NetworkConfig){
     .topology_size = 3,
     .activations   = (Activation[]){ ACT_LEAKY_RELU, ACT_LINEAR },
     .loss          = LOSS_MSE,
+    .initializer   = INIT_HE,
 });
 ```
 
