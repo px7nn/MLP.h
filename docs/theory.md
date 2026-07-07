@@ -72,9 +72,10 @@ L = (1/n_outputs) * sum_i (pred[i] - target[i])^2
 L = -(1/n_outputs) * sum_i [ target[i]*log(pred[i]) + (1-target[i])*log(1-pred[i]) ]
 ```
 
-Note that `MLP_Train`'s `stop_loss`/progress reporting always accumulate
-plain squared error for tracking purposes, regardless of which `Loss`
-is actually driving the gradient — see `MLP_Train` in `docs/api.md`.
+Note that the reported loss and early-stop checks in `MLP_Train` are calculated
+using the active loss function configured for the network, rather than defaulting
+to mean squared error. Average loss values are normalized across both samples and
+output units (`n_samples * n_outputs`).
 
 ## Backward pass (`_backprop`)
 

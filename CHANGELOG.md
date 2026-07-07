@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.1] - 2026-07-07
+
+### Added
+- Internal `_log()` helper function implementing natural logarithm using Newton's method to avoid relying on `math.h`.
+- Internal `_loss()` helper function to evaluate network predictions against targets according to the configured loss function.
+- Support for computing and reporting true configured loss (MSE or Binary Cross Entropy) during training instead of hardcoded squared error.
+
+### Changed
+- Epoch loss normalization in `MLP_Train()` now divides by `d->n_samples * d->n_outputs` (average loss per output unit) instead of just `d->n_samples`.
+
+### Docs
+- Updated `docs/api.md` and `docs/theory.md` to reflect that `MLP_Train()` now calculates and normalized the reported/early-stop loss based on the network's configured loss function rather than hardcoding MSE.
+
+---
+
 ## [0.6.0] - 2026-07-07
 
 ### Added

@@ -9,8 +9,8 @@ including the header.
 ```c
 #define MLP_VERSION_MAJOR 0
 #define MLP_VERSION_MINOR 6
-#define MLP_VERSION_PATCH 0
-#define MLP_VERSION_STRING "0.6.0"
+#define MLP_VERSION_PATCH 1
+#define MLP_VERSION_STRING "0.6.1"
 
 #define MLP_MAGIC   0x4D4C5032u /* "MLP2" */
 #define MLP_VERSION 2u
@@ -325,11 +325,11 @@ whichever `Loss` the network was created with (`net->loss` — see
 `NetworkConfig`). Returns `false` if `net`, `d`, or `options` are
 invalid, if `d->output` is NULL, or if the dataset's feature/output
 counts don't match the network's input/output widths. Returns `true` on
-completion (including early stop via `stop_loss`). Note that
-`stop_loss`/the printed loss are always in mean-squared-error terms
-regardless of `net->loss`, since `MLP_Train` accumulates squared error
-for its progress reporting independently of the loss used for the
-gradient.
+completion (including early stop via `stop_loss`). Both `stop_loss` and the
+printed loss are computed using the network's configured `Loss` function (i.e.,
+mean squared error for `LOSS_MSE`, and binary cross-entropy for
+`LOSS_BINARY_CROSS_ENTROPY`), normalized by the total number of prediction
+outputs (`d->n_samples * d->n_outputs`).
 
 ### `MLP_Predict`
 
