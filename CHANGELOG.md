@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0] - 2026-07-07
+
+### Added
+- Single-sample prediction function `MLP_Predict(const Network *net, double *input, double *output)`.
+- Support for configuring weight initializers per layer via `NetworkConfig.initializers` (an array of initializers of size `topology_size - 1`).
+- Automatic selection of the best initializer for each layer based on its activation using `MLP_AUTO_INITIALIZERS` (mapped to `NULL`).
+- Internal helper `_get_best_initializer(Activation act)` mapping `ACT_RELU` and `ACT_LEAKY_RELU` to `INIT_HE`, and `ACT_SIGMOID` and `ACT_LINEAR` to `INIT_XAVIER`.
+- New visualization example `examples/visual_sin.c` which fits a sine wave and demonstrates interpolation vs. extrapolation.
+
+### Changed
+- Removed `INIT_RANDOM` from the `Initializer` enum.
+- Updated `NetworkConfig` struct to take `const Initializer *initializers` instead of a single `const Initializer initializer` field.
+
+### Docs
+- Updated `README.md`, `docs/getting_started.md`, `docs/api.md`, and `docs/theory.md` to reflect version `0.6.0` changes including per-layer initialization and the single-sample `MLP_Predict()` API.
+
+---
+
 ## [0.5.0] - 2026-07-06
 
 ### Added

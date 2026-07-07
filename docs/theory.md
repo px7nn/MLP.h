@@ -29,16 +29,14 @@ hidden vs. output layers — any layer can use any of the four.
 
 ## Weight initialization
 
-Initial weights are set by `_initialize_weight` based on the selected `Initializer` strategy in `NetworkConfig.initializer`:
+Initial weights are set by `_initialize_weight` based on the `Initializer` strategy configured per layer in `NetworkConfig.initializers`. If `cfg->initializers` is set to `MLP_AUTO_INITIALIZERS` (or `NULL`), the library automatically selects the best strategy for each layer based on its activation function:
 
-- **`INIT_RANDOM`**: Weights are initialized uniformly in `[-1, 1]`.
 - **`INIT_XAVIER`**: Xavier/Glorot initialization, scaling initial uniform weights by `sqrt(1 / inputs)`:  
   `w[j][k] = sqrt(1 / inputs) * r` where `r ~ U(-1, 1)`.  
-  Useful for keeping signal variance stable across layers with linear or sigmoid activations.
+  Useful for keeping signal variance stable across layers. Automatically selected for `ACT_SIGMOID` and `ACT_LINEAR`.
 - **`INIT_HE`**: He/Kaiming initialization, scaling initial uniform weights by `sqrt(2 / inputs)`:  
   `w[j][k] = sqrt(2 / inputs) * r` where `r ~ U(-1, 1)`.  
-  Recommended for ReLU and Leaky ReLU activations to account for zeroed-out negative activations.
-
+  Recommended to account for zeroed-out negative activations. Automatically selected for `ACT_RELU` and `ACT_LEAKY_RELU`.
 
 Biases for all layers are initialized to `0` regardless of the weight initializer.
 

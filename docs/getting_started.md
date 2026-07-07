@@ -25,8 +25,8 @@ NetworkConfig cfg = {
     .topology      = (size_t[]){2, 8, 1}, // 2 inputs -> 8 hidden -> 1 output
     .topology_size = 3,
     .activations   = (Activation[]){ACT_LEAKY_RELU, ACT_LINEAR},
+    .initializers  = MLP_AUTO_INITIALIZERS, // or custom array, e.g. (Initializer[]){INIT_HE, INIT_XAVIER}
     .loss          = LOSS_MSE,
-    .initializer   = INIT_HE,
 };
 
 Network net = MLP_Create_Network(&cfg);
@@ -38,11 +38,11 @@ entries — here that's "input->hidden" (`ACT_LEAKY_RELU`) and
 both regression and classification-via-thresholding; for a probability
 output, use `ACT_SIGMOID` on the last layer paired with
 `LOSS_BINARY_CROSS_ENTROPY` (see [`examples/load_csv.c`](../examples/load_csv.c)).
-`initializer` selects the weight initialization strategy (`INIT_RANDOM` for
-uniform random in `[-1, 1]`, `INIT_XAVIER` for Xavier initialization, or
-`INIT_HE` for He initialization). Using `INIT_HE` or `INIT_XAVIER` scales initial
-weights by the number of inputs to the layer, helping deeper or wider networks
-train more stably.
+`initializers` configures the weight initialization strategy for each layer
+(connection). Pass `MLP_AUTO_INITIALIZERS` (or `NULL`) to let the library
+automatically assign the best initializer for each layer based on its activation
+(He initialization for ReLU/Leaky ReLU, and Xavier for Sigmoid/Linear). Or,
+pass a custom array of size `topology_size - 1` (e.g. `(Initializer[]){INIT_HE, INIT_XAVIER}`).
 
 ## 3. Wrap your data in a Dataset
 
@@ -96,13 +96,26 @@ sample, not once per epoch) and minimizes mean squared error.
 
 ## 5. Predict
 
-Predictions are written into a caller-provided buffer sized
-`n_samples * n_outputs`.
+You can predict on an entire dataset at once or run inference on a single sample:
+
+### Batch Prediction
+
+Predictions for a whole dataset are written into a caller-provided buffer sized `n_samples * n_outputs`.
 
 ```c
 double preds[4];
 Dataset test = MLP_Create_Dataset(X, NULL, 4, 2, 1);
 MLP_Predict_Dataset(&net, &test, preds);
+```
+
+### Single-sample Prediction
+
+To predict on a single input array directly, use `MLP_Predict()`:
+
+```c
+double input[2] = {0, 1};
+double output[1];
+MLP_Predict(&net, input, output);
 ```
 
 ## 6. Save and load a model
@@ -177,7 +190,7 @@ to recover from errors instead of aborting.
 
 ## Full examples
 
-The [`examples/`](../examples/) directory has three runnable programs:
+The [`examples/`](../examples/) directory has four runnable programs:
 
 - [`xor_gate.c`](../examples/xor_gate.c) — trains a network on XOR from
   scratch and saves it to `xor.mlp`.
@@ -186,3 +199,7 @@ The [`examples/`](../examples/) directory has three runnable programs:
 - [`load_csv.c`](../examples/load_csv.c) — loads
   [`datasets/circle.csv`](../datasets/circle.csv) with `MLP_LoadCSV`,
   trains on it, predicts, and cleans up with `MLP_Destroy_Dataset`.
+- [`visual_sin.c`](../examples/visual_sin.c) — loads
+  [`datasets/sinewave_train.csv`](../datasets/sinewave_train.csv), trains a
+  network to fit a sine wave, predicts outputs over interpolation and
+  extrapolation ranges, and plots the results using gnuplot.

@@ -51,8 +51,8 @@ int main(void) {
         .topology      = (size_t[]){2, 5, 1},
         .topology_size = 3,
         .activations = (Activation[]){ACT_RELU, ACT_SIGMOID},
-        .loss = LOSS_BINARY_CROSS_ENTROPY,
-        .initializer = INIT_HE
+        .initializers  = MLP_AUTO_INITIALIZERS,
+        .loss = LOSS_BINARY_CROSS_ENTROPY
     };
 
     Network net = MLP_Create_Network(&cfg);

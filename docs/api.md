@@ -8,9 +8,9 @@ including the header.
 
 ```c
 #define MLP_VERSION_MAJOR 0
-#define MLP_VERSION_MINOR 5
+#define MLP_VERSION_MINOR 6
 #define MLP_VERSION_PATCH 0
-#define MLP_VERSION_STRING "0.5.0"
+#define MLP_VERSION_STRING "0.6.0"
 
 #define MLP_MAGIC   0x4D4C5032u /* "MLP2" */
 #define MLP_VERSION 2u
@@ -132,7 +132,6 @@ but the gradient won't correspond to that loss's true derivative.
 
 ```c
 typedef enum {
-    INIT_RANDOM,
     INIT_XAVIER,
     INIT_HE,
 
@@ -140,8 +139,7 @@ typedef enum {
 } Initializer;
 ```
 
-Weight initialization strategy, set for the network via `NetworkConfig.initializer`.
-- `INIT_RANDOM` — uniform random weights in `[-1, 1]`.
+Weight initialization strategy, set for each connection layer via `NetworkConfig.initializers`.
 - `INIT_XAVIER` — Xavier/Glorot initialization, scaling initial uniform weights by `sqrt(1 / inputs)`. Best suited for linear or sigmoid activations.
 - `INIT_HE` — He/Kaiming initialization, scaling initial uniform weights by `sqrt(2 / inputs)`. Best suited for ReLU or leaky ReLU activations.
 - `INIT_COUNT` — sentinel, not a real initializer strategy.
@@ -199,9 +197,9 @@ typedef struct {
     const size_t topology_size;
 
     const Activation *activations;
-    Loss loss;
+    const Initializer *initializers;
 
-    const Initializer initializer;
+    Loss loss;
 } NetworkConfig;
 ```
 
@@ -210,9 +208,12 @@ input to output, e.g. `{2, 8, 1}` for a 2-input, 8-hidden, 1-output
 network; `topology_size` is the length of that array (layer count + 1).
 `activations` has one entry per *connection* — `topology_size - 1`
 entries, i.e. one `Activation` per resulting `Layer` — so a 3-entry
-topology needs a 2-entry `activations` array. `loss` selects the
-training loss for the whole network (see `Loss` above). `initializer` selects
-the weight initialization strategy (see `Initializer` above).
+topology needs a 2-entry `activations` array. `initializers` points to an
+array of type `Initializer` of size `topology_size - 1` specifying the weight
+initialization strategy for each connection layer. Pass `MLP_AUTO_INITIALIZERS`
+(or `NULL`) to automatically assign the best initializer for each layer based
+on its activation (He for ReLU/Leaky ReLU, Xavier for Sigmoid/Linear). `loss`
+selects the training loss for the whole network (see `Loss` above).
 
 ### `Layer` / `Network`
 
@@ -282,10 +283,12 @@ Network MLP_Create_Network(const NetworkConfig *cfg);
 Builds a `Network` from a `NetworkConfig` (see above). Requires
 `cfg`/`cfg->topology`/`cfg->activations` to be non-NULL,
 `cfg->topology_size >= 2`, every topology entry `> 0`, every
-`cfg->activations` entry `< ACT_COUNT`, `cfg->loss < LOSS_COUNT`, and
-`cfg->initializer < INIT_COUNT`. Weights are initialized according to the
-strategy configured in `cfg->initializer` (see `Initializer` above); biases
-start at 0. Returns a zeroed `Network` on invalid input or allocation failure.
+`cfg->activations` entry `< ACT_COUNT`, `cfg->loss < LOSS_COUNT`, and every
+`cfg->initializers` entry `< INIT_COUNT` (if `cfg->initializers` is non-NULL).
+Weights are initialized according to the strategies configured in `cfg->initializers`
+(or automatically selected if `cfg->initializers` is `MLP_AUTO_INITIALIZERS`/`NULL`;
+see `Initializer` above); biases start at 0. Returns a zeroed `Network` on
+invalid input or allocation failure.
 
 Weight randomization (which forms the base or scale for the initializers)
 uses `rand()`, uninitialized by the library — call `srand()` yourself if
@@ -296,8 +299,8 @@ Network net = MLP_Create_Network(&(NetworkConfig){
     .topology      = (size_t[]){ 2, 8, 1 },
     .topology_size = 3,
     .activations   = (Activation[]){ ACT_LEAKY_RELU, ACT_LINEAR },
+    .initializers  = MLP_AUTO_INITIALIZERS,
     .loss          = LOSS_MSE,
-    .initializer   = INIT_HE,
 });
 ```
 
@@ -327,6 +330,18 @@ completion (including early stop via `stop_loss`). Note that
 regardless of `net->loss`, since `MLP_Train` accumulates squared error
 for its progress reporting independently of the loss used for the
 gradient.
+
+### `MLP_Predict`
+
+```c
+bool MLP_Predict(const Network *net, double *input, double *output);
+```
+
+Runs a forward pass on a single input vector `input` and writes the predicted output to `output`.
+- `input` must point to an array of size equal to the network's input features count (`net->layers[0].inputs`).
+- `output` must point to a caller-allocated array of size equal to the network's output count (`net->layers[net->n_layers - 1].neurons`).
+
+Returns `false` if `net`, `input`, or `output` is NULL. Otherwise returns `true` on success.
 
 ### `MLP_Predict_Dataset`
 
