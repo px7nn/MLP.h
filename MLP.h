@@ -15,8 +15,8 @@
 
 #define MLP_VERSION_MAJOR 0
 #define MLP_VERSION_MINOR 6
-#define MLP_VERSION_PATCH 0
-#define MLP_VERSION_STRING "0.6.0"
+#define MLP_VERSION_PATCH 1
+#define MLP_VERSION_STRING "0.6.1"
 
 #define MLP_MAGIC   0x4D4C5032u /* "MLP2" */
 #define MLP_VERSION 2u
@@ -193,9 +193,12 @@ static void MLP_Destroy_Dataset(Dataset *d);
 static inline void _mlp_set_error(MLP_Error err);
 static void _print_summary(size_t epoch, size_t max_epochs, double loss, const char *reason);
 
+// to avoid using math.h
 static inline double _sqrt(double x);
 static inline double _pow(double base, unsigned int exp);
-static inline double _exponential(double x); // to avoid using math.h
+static inline double _exponential(double x); 
+static inline double _log(double x); 
+
 static inline double _initialize_weight(const size_t inputs, const Initializer initializer);
 static inline Initializer _get_best_initializer(Activation act);
 
@@ -226,6 +229,12 @@ static void _backprop(
     _Workspace *ws, 
     const Network *net, 
     const double *target
+);
+
+static inline double _loss(
+    double pred,
+    double target,
+    Loss loss
 );
 
 
@@ -344,6 +353,18 @@ static inline double _exponential(double x){
     }
     return res * sum;
 }
+static inline double _log(double x){
+    if(x <= 0.0)
+        return -1.7976931348623157e308;
+
+    double y = 0.0;
+    for(size_t i = 0; i < 8; ++i){
+        double ey = _exponential(y);
+        y -= (ey - x) / ey;
+    }
+    return y;
+}
+
 static inline double _initialize_weight(const size_t input_count, const Initializer initializer){
     double w= (((double)rand() / RAND_MAX) * 2.0 - 1.0);
     switch(initializer){
@@ -558,6 +579,32 @@ static void _backprop(
             ws->deltas[i][j] = sum * _activation_derivative(ws->activations[i][j], net->layers[i-1].activation); //current layer's activation
         }
     }
+}
+
+static inline double _loss(
+    double pred,
+    double target,
+    Loss loss
+){
+    switch(loss){
+        case LOSS_MSE:{
+            double err = pred - target;
+            return err * err;
+        }
+
+        case LOSS_BINARY_CROSS_ENTROPY:{
+            double const EPSILON = 1e-15; // to prevent _log(0)
+            if(pred < EPSILON)
+                pred = EPSILON;
+            else if(pred > 1.0 - EPSILON)
+                pred = 1.0 - EPSILON;
+
+            return -(target * _log(pred) + (1.0 - target) * _log(1.0 - pred));
+        }
+
+        default: return 0.0;
+    }
+    return 0.0;
 }
 
 
@@ -802,10 +849,8 @@ static bool MLP_Train(
             const double *target = d->output + sample * d->n_outputs;
             double *pred = ws.activations[ws.layers - 1];
             
-            for(size_t i=0; i<d->n_outputs; ++i){
-                double error = pred[i] - target[i];
-                loss += error * error;
-            }
+            for(size_t i=0; i<d->n_outputs; ++i)
+                loss += _loss(pred[i], target[i], net->loss);
 
             _backprop(&ws, net, target);
 
@@ -823,7 +868,7 @@ static bool MLP_Train(
             }
         }
 
-        loss /= (double)d->n_samples;
+        loss /= (double)(d->n_samples * d->n_outputs);
 
         if(options->verbose)
             _print_summary(epch, options->max_epochs, loss, NULL);
