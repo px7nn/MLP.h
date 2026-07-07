@@ -14,9 +14,9 @@
 #define MLP_H
 
 #define MLP_VERSION_MAJOR 0
-#define MLP_VERSION_MINOR 5
+#define MLP_VERSION_MINOR 6
 #define MLP_VERSION_PATCH 0
-#define MLP_VERSION_STRING "0.5.0"
+#define MLP_VERSION_STRING "0.6.0"
 
 #define MLP_MAGIC   0x4D4C5032u /* "MLP2" */
 #define MLP_VERSION 2u
@@ -27,6 +27,9 @@
 #endif
 
 #define LEN(ARR) sizeof(ARR) / sizeof(ARR[0])
+
+// Automatically assign the best initializer for each layer based on its activation.
+#define MLP_AUTO_INITIALIZERS NULL
 
 
 #include <stddef.h>
@@ -61,7 +64,6 @@ typedef enum {
 
 
 typedef enum {
-    INIT_RANDOM,
     INIT_XAVIER,
     INIT_HE,
 
@@ -95,9 +97,9 @@ typedef struct {
     const size_t topology_size;
 
     const Activation *activations;
-    Loss loss;
+    const Initializer *initializers;
     
-    const Initializer initializer;
+    Loss loss;
 } NetworkConfig;
 
 typedef struct {
@@ -165,6 +167,7 @@ static Network MLP_Create_Network(const NetworkConfig *cfg);
 static void    MLP_View_Network(const Network *net);
 static void    MLP_View_Dataset(const Dataset *d);
 static bool    MLP_Train(Network *net, const Dataset *d, const TrainOptions *options);
+static bool    MLP_Predict(const Network *net, double *input, double *output);
 static bool    MLP_Predict_Dataset(const Network *net, const Dataset *d, double *buf);
 static void    MLP_Destroy_Network(Network *net);
 
@@ -194,6 +197,7 @@ static inline double _sqrt(double x);
 static inline double _pow(double base, unsigned int exp);
 static inline double _exponential(double x); // to avoid using math.h
 static inline double _initialize_weight(const size_t inputs, const Initializer initializer);
+static inline Initializer _get_best_initializer(Activation act);
 
 /* Activation funcs */
 static inline double _ReLU(double z);
@@ -343,13 +347,23 @@ static inline double _exponential(double x){
 static inline double _initialize_weight(const size_t input_count, const Initializer initializer){
     double w= (((double)rand() / RAND_MAX) * 2.0 - 1.0);
     switch(initializer){
-        case INIT_RANDOM: return w;
         case INIT_XAVIER: return _sqrt(1 / (double)input_count) * w;
         case INIT_HE:     return _sqrt(2 / (double)input_count) * w;
-
-        default:          return w;
+        default:          return 0.0;
     }
-    return w;
+    return 0.0;
+}
+static inline Initializer _get_best_initializer(Activation act){
+    switch(act){
+        case ACT_RELU:
+        case ACT_LEAKY_RELU: return INIT_HE;
+
+        case ACT_SIGMOID:
+        case ACT_LINEAR:     return INIT_XAVIER;
+        
+        default:             return 0.0;        
+    }
+    return 0.0;
 }
 
 static inline double _ReLU(double z){
@@ -607,14 +621,20 @@ static Network MLP_Create_Network(const NetworkConfig *cfg){
             _exit_on_failure();
             return net;
         }
-    for(size_t i = 0; i < n_layers; ++i)
+    for(size_t i = 0; i < n_layers; ++i){
         if(cfg->activations[i] >= ACT_COUNT){
             _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
             _exit_on_failure();
             return net;
         }
+        if(cfg->initializers && cfg->initializers[i] >= INIT_COUNT){
+            _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
+            _exit_on_failure();
+            return net;
+        }
+    }
     
-    if(cfg->loss >= LOSS_COUNT || cfg->initializer >= INIT_COUNT){
+    if(cfg->loss >= LOSS_COUNT){
         _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
         _exit_on_failure();
         return net;
@@ -651,9 +671,14 @@ static Network MLP_Create_Network(const NetworkConfig *cfg){
         if(!layer->weights || !layer->biases)
             goto fail;
 
+        Initializer init = 
+            (!cfg->initializers)
+                ? _get_best_initializer(layer->activation)
+                : cfg->initializers[i];
+
         for(size_t j = 0; j < layer->neurons; j++){
             for(size_t k = 0; k < layer->inputs; k++)
-                layer->weights[j * layer->inputs + k] = _initialize_weight(layer->inputs, cfg->initializer);
+                layer->weights[j * layer->inputs + k] = _initialize_weight(layer->inputs, init);
         }
     }
 
@@ -816,6 +841,22 @@ static bool MLP_Train(
 
     _Workspace_Destroy(&ws);
     return true;
+}
+
+static bool MLP_Predict(const Network *net, double *input, double *output){
+    if (!net || !net->layers || !input || !output) {
+        _mlp_set_error(MLP_ERR_NULL_POINTER);
+        _exit_on_failure();
+        return false;
+    }
+
+    return MLP_Predict_Dataset(net, &(Dataset){
+        .samples    = input,
+        .output     = NULL,
+        .n_samples  = 1,
+        .n_features = net->layers[0].inputs,
+        .n_outputs  = net->layers[net->n_layers - 1].neurons
+    }, output);
 }
 
 static bool MLP_Predict_Dataset(const Network *net, const Dataset *d, double *buf){
