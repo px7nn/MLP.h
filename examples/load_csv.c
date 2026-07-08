@@ -3,7 +3,7 @@
 #include "../MLP.h"
 
 #define DATA_PATH   "../datasets/circle.csv"
-#define MAX_SAMPLE  26
+#define MAX_SAMPLE  30
 #define N_FEATURES  2
 #define N_OUTPUTS   1
 
@@ -16,22 +16,21 @@ int main(){
         true
     );
 
-    NetworkConfig cfg = {
-        .topology      = (size_t[]){2, 8, 8, 1},
-        .topology_size = 4,
-        .activations = (Activation[]){ACT_LEAKY_RELU, ACT_LEAKY_RELU, ACT_SIGMOID},
-        .initializers  = MLP_AUTO_INITIALIZERS,
-        .loss = LOSS_BINARY_CROSS_ENTROPY
-    };
+    Network n = MLP_Create_Network(&(NetworkConfig){
+        .topology       = (size_t[]){2, 8, 8, 1},
+        .topology_size  = 4,
+        .activations    = (Activation[]){ACT_LEAKY_RELU, ACT_LEAKY_RELU, ACT_SIGMOID},
+        .initializers   = MLP_AUTO_INITIALIZERS,
+        .loss           = LOSS_BINARY_CROSS_ENTROPY
+    });
 
-    Network n = MLP_Create_Network(&cfg);
 
-    TrainOptions opt = MLP_DefaultTrainOptions();
-    opt.verbose = true;
-    opt.max_epochs = 10000;
-    opt.learning_rate = 1e-2;
-
-    MLP_Train(&n, &d, &opt);
+    MLP_Train(&n, &d, &(TrainOptions){
+        .max_epochs     = 10000,
+        .learning_rate  = 1e-2,
+        .stop_loss      = 1e-8,
+        .verbose        = true
+    });
 
     Dataset test = d;
     test.output = malloc(d.n_samples * N_OUTPUTS * sizeof *test.output);

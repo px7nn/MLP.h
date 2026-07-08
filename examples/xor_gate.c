@@ -47,15 +47,13 @@ int main(void) {
     );
 
     /* Create a 2 → 5 → 1 network. */
-    NetworkConfig cfg = {
-        .topology      = (size_t[]){2, 5, 1},
-        .topology_size = 3,
-        .activations = (Activation[]){ACT_RELU, ACT_SIGMOID},
-        .initializers  = MLP_AUTO_INITIALIZERS,
-        .loss = LOSS_BINARY_CROSS_ENTROPY
-    };
-
-    Network net = MLP_Create_Network(&cfg);
+    Network net = MLP_Create_Network(&(NetworkConfig){
+        .topology       = (size_t[]){2, 5, 1},
+        .topology_size  = 3,
+        .activations    = (Activation[]){ACT_RELU, ACT_SIGMOID},
+        .initializers   = MLP_AUTO_INITIALIZERS,
+        .loss           = LOSS_BINARY_CROSS_ENTROPY
+    });
 
     /* Configure training. */
     TrainOptions opt = MLP_DefaultTrainOptions();
