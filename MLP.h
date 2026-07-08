@@ -15,8 +15,8 @@
 
 #define MLP_VERSION_MAJOR 0
 #define MLP_VERSION_MINOR 6
-#define MLP_VERSION_PATCH 1
-#define MLP_VERSION_STRING "0.6.1"
+#define MLP_VERSION_PATCH 2
+#define MLP_VERSION_STRING "0.6.2"
 
 #define MLP_MAGIC   0x4D4C5032u /* "MLP2" */
 #define MLP_VERSION 2u
@@ -192,6 +192,7 @@ static void MLP_Destroy_Dataset(Dataset *d);
 
 static inline void _mlp_set_error(MLP_Error err);
 static void _print_summary(size_t epoch, size_t max_epochs, double loss, const char *reason);
+static bool _verify_net_d(const Network *net, const Dataset *d, const bool check_output);
 
 // to avoid using math.h
 static inline double _sqrt(double x);
@@ -308,6 +309,36 @@ static void _print_summary(size_t epoch, size_t max_epochs, double loss, const c
         printf("Final Loss : %.8e\n", loss);
         printf("Reason     : %s\n\n", reason);
     }
+}
+
+static bool _verify_net_d(const Network *net, const Dataset *d, const bool check_output){
+    if (!net 
+        || !net->layers 
+        || !d   
+        || !d->samples 
+        || check_output && !d->output
+    ) {
+        // No check for d->output cause MLP_Predict() supports .output to be null
+        _mlp_set_error(MLP_ERR_NULL_POINTER);
+        _exit_on_failure();
+        return false;
+    }
+    if(net->n_layers == 0){
+        _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
+        _exit_on_failure();
+        return false;
+    }
+    if(net->layers[0].inputs != d->n_features){
+        _mlp_set_error(MLP_ERR_SHAPE_MISMATCH);
+        _exit_on_failure();
+        return false;
+    }
+    if(net->layers[net->n_layers - 1].neurons != d->n_outputs){
+        _mlp_set_error(MLP_ERR_SHAPE_MISMATCH);
+        _exit_on_failure();
+        return false;
+    }
+    return true;
 }
 
 static inline double _sqrt(double x){
@@ -624,13 +655,8 @@ static Dataset MLP_Create_Dataset(
     size_t n_features,
     size_t n_outputs
 ){
-    if(!samples){
+    if(!samples || n_samples == 0 || n_features == 0){
         _mlp_set_error(MLP_ERR_NULL_POINTER);
-        _exit_on_failure();
-        return (Dataset){0};
-    }
-    if(n_samples == 0 || n_features == 0){
-        _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
         _exit_on_failure();
         return (Dataset){0};
     }
@@ -668,18 +694,15 @@ static Network MLP_Create_Network(const NetworkConfig *cfg){
             _exit_on_failure();
             return net;
         }
-    for(size_t i = 0; i < n_layers; ++i){
-        if(cfg->activations[i] >= ACT_COUNT){
+
+    for(size_t i = 0; i < n_layers; ++i)
+        if (cfg->activations[i] >= ACT_COUNT
+            || cfg->initializers && cfg->initializers[i] >= INIT_COUNT
+        ){
             _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
             _exit_on_failure();
             return net;
         }
-        if(cfg->initializers && cfg->initializers[i] >= INIT_COUNT){
-            _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
-            _exit_on_failure();
-            return net;
-        }
-    }
     
     if(cfg->loss >= LOSS_COUNT){
         _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
@@ -804,28 +827,10 @@ static bool MLP_Train(
     const Dataset *d,
     const TrainOptions *options
 ){
-    if(!net || !net->layers || net->n_layers == 0){
-        _mlp_set_error(MLP_ERR_NULL_POINTER);
-        _exit_on_failure();
+    if(!_verify_net_d(net, d, true))
         return false;
-    }
-    if(!d || !d->samples || !d->output){
-        _mlp_set_error(MLP_ERR_NULL_POINTER);
-        _exit_on_failure();
-        return false;
-    }
     if(!options){
         _mlp_set_error(MLP_ERR_NULL_POINTER);
-        _exit_on_failure();
-        return false;
-    }
-    if(net->layers[0].inputs != d->n_features){
-        _mlp_set_error(MLP_ERR_SHAPE_MISMATCH);
-        _exit_on_failure();
-        return false;
-    }
-    if(net->layers[net->n_layers - 1].neurons != d->n_outputs){
-        _mlp_set_error(MLP_ERR_SHAPE_MISMATCH);
         _exit_on_failure();
         return false;
     }
@@ -905,28 +910,10 @@ static bool MLP_Predict(const Network *net, double *input, double *output){
 }
 
 static bool MLP_Predict_Dataset(const Network *net, const Dataset *d, double *buf){
-    if(!net || !net->layers || net->n_layers == 0){
-        _mlp_set_error(MLP_ERR_NULL_POINTER);
-        _exit_on_failure();
+    if(!_verify_net_d(net, d, false))
         return false;
-    }
-    if(!d || !d->samples){
-        _mlp_set_error(MLP_ERR_NULL_POINTER);
-        _exit_on_failure();
-        return false;
-    }
     if(!buf){
         _mlp_set_error(MLP_ERR_NULL_POINTER);
-        _exit_on_failure();
-        return false;
-    }
-    if(net->layers[0].inputs != d->n_features){
-        _mlp_set_error(MLP_ERR_SHAPE_MISMATCH);
-        _exit_on_failure();
-        return false;
-    }
-    if(net->layers[net->n_layers - 1].neurons != d->n_outputs){
-        _mlp_set_error(MLP_ERR_SHAPE_MISMATCH);
         _exit_on_failure();
         return false;
     }
@@ -980,28 +967,19 @@ static bool MLP_Save_Network(const Network *net, const char *filename){
     uint32_t magic   = MLP_MAGIC;
     uint32_t version = MLP_VERSION;
 
-    if(fwrite(&magic,   sizeof magic,   1, fp) != 1)
-        goto fail;
-    if(fwrite(&version, sizeof version, 1, fp) != 1)
-        goto fail;
-
-    if(fwrite(&net->n_layers, sizeof net->n_layers, 1, fp) != 1)
-        goto fail;
-
-    if(fwrite(&net->loss, sizeof net->loss, 1, fp) != 1)
-        goto fail;
+    if (fwrite(&magic,            sizeof magic,         1, fp) != 1
+        || fwrite(&version,       sizeof version,       1, fp) != 1
+        || fwrite(&net->n_layers, sizeof net->n_layers, 1, fp) != 1
+        || fwrite(&net->loss,     sizeof net->loss,     1, fp) != 1
+    ) goto fail;
 
     for(size_t i=0; i<net->n_layers; ++i){
         const Layer *layer = &net->layers[i];
 
-        if(fwrite(&layer->neurons, sizeof layer->neurons, 1, fp) != 1)
-            goto fail;
-        if(fwrite(&layer->inputs,  sizeof layer->inputs,  1, fp) != 1)
-            goto fail;
-
-        if(fwrite(&layer->activation,  sizeof layer->activation,  1, fp) != 1)
-            goto fail;
-
+        if (fwrite(&layer->neurons,       sizeof layer->neurons,     1, fp) != 1
+            || fwrite(&layer->inputs,     sizeof layer->inputs,      1, fp) != 1
+            || fwrite(&layer->activation, sizeof layer->activation,  1, fp) != 1
+        ) goto fail;
 
         if(fwrite(
             layer->weights, 
@@ -1043,11 +1021,9 @@ static bool MLP_Load_Network(Network *net, const char *filename){
     uint32_t magic;
     uint32_t version;
 
-    if(fread(&magic,   sizeof magic,   1, fp) != 1){
-        _mlp_set_error(MLP_ERR_FILE_READ);
-        goto fail;
-    }
-    if(fread(&version, sizeof version, 1, fp) != 1){
+    if (fread(&magic,      sizeof magic,   1, fp) != 1
+        || fread(&version, sizeof version, 1, fp) != 1
+    ){
         _mlp_set_error(MLP_ERR_FILE_READ);
         goto fail;
     }
@@ -1059,15 +1035,13 @@ static bool MLP_Load_Network(Network *net, const char *filename){
 
     MLP_Destroy_Network(net);
 
-    if(fread(&net->n_layers, sizeof net->n_layers, 1, fp) != 1){
+    if (fread(&net->n_layers, sizeof net->n_layers, 1, fp) != 1
+        || fread(&net->loss,  sizeof net->loss,     1, fp) != 1
+    ){
         _mlp_set_error(MLP_ERR_FILE_READ);
         goto fail;
     }
 
-    if(fread(&net->loss, sizeof net->loss, 1, fp) != 1){
-        _mlp_set_error(MLP_ERR_FILE_READ);
-        goto fail;
-    }
     if(net->loss >= LOSS_COUNT){
         _mlp_set_error(MLP_ERR_FILE_FORMAT);
         goto fail;
@@ -1082,16 +1056,10 @@ static bool MLP_Load_Network(Network *net, const char *filename){
     for(size_t i=0; i<net->n_layers; ++i){
         Layer *layer = &net->layers[i];
 
-        if(fread(&layer->neurons, sizeof layer->neurons, 1, fp) != 1){
-            _mlp_set_error(MLP_ERR_FILE_READ);
-            goto fail;
-        }
-        if(fread(&layer->inputs,  sizeof layer->inputs,  1, fp) != 1){
-            _mlp_set_error(MLP_ERR_FILE_READ);
-            goto fail;
-        }
-
-        if(fread(&layer->activation,  sizeof layer->activation,  1, fp) != 1){
+        if (fread(&layer->neurons,       sizeof layer->neurons,     1, fp) != 1
+            || fread(&layer->inputs,     sizeof layer->inputs,      1, fp) != 1
+            || fread(&layer->activation, sizeof layer->activation,  1, fp) != 1
+        ){
             _mlp_set_error(MLP_ERR_FILE_READ);
             goto fail;
         }
@@ -1153,17 +1121,10 @@ static Dataset MLP_LoadCSV(
         _exit_on_failure();
         return d;
     }
-    if(n_features == 0 || max_samples == 0){
-        _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
-        _exit_on_failure();
-        return d;
-    }
-    if(max_samples > SIZE_MAX / n_features / sizeof *d.samples){
-        _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
-        _exit_on_failure();
-        return d;
-    }
-    if(n_outputs && max_samples > SIZE_MAX / n_outputs / sizeof *d.output){
+    if (n_features == 0 
+        || max_samples == 0
+        || max_samples > SIZE_MAX / n_features / sizeof *d.samples
+        || n_outputs && max_samples > SIZE_MAX / n_outputs / sizeof *d.output){
         _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
         _exit_on_failure();
         return d;
