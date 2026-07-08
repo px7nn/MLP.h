@@ -68,7 +68,7 @@ have exactly `n_features + n_outputs` numeric columns, features first:
 ```c
 Dataset d = MLP_LoadCSV(
     "circle.csv",
-    /* max_samples */ 26,
+    /* max_samples */ 30,
     /* n_features  */ 2,
     /* n_outputs   */ 1,
     /* has_header  */ true

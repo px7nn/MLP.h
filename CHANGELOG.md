@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.2] - 2026-07-08
+
+### Added
+- Internal `_verify_net_d()` helper function to consolidate duplicate network and dataset shape validation checks.
+
+### Changed
+- Consolidated standard library file input/output error checks (`fread`/`fwrite`) in `MLP_Save_Network()` and `MLP_Load_Network()`.
+- Consolidated boundary and parameter validation checks in `MLP_LoadCSV()`.
+- Updated `examples/load_csv.c` and `examples/xor_gate.c` to inline their `NetworkConfig` and `TrainOptions` configuration structs.
+- Increased `MAX_SAMPLE` limit to `30` in `examples/load_csv.c`.
+- Updated `.gitignore` to ignore `.mlp` files.
+
+### Docs
+- Updated `README.md`, `docs/getting_started.md`, and `docs/api.md` to reflect version `0.6.2` changes.
+
+---
+
 ## [0.6.1] - 2026-07-07
 
 ### Added

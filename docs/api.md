@@ -9,8 +9,8 @@ including the header.
 ```c
 #define MLP_VERSION_MAJOR 0
 #define MLP_VERSION_MINOR 6
-#define MLP_VERSION_PATCH 1
-#define MLP_VERSION_STRING "0.6.1"
+#define MLP_VERSION_PATCH 2
+#define MLP_VERSION_STRING "0.6.2"
 
 #define MLP_MAGIC   0x4D4C5032u /* "MLP2" */
 #define MLP_VERSION 2u
