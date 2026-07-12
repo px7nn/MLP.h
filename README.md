@@ -9,7 +9,7 @@ external dependencies beyond the standard library.
 
 ## Features
 
-- Single header, C99/C11, no dependencies beyond `<stdlib.h>`, `<stdio.h>`,
+- Single header, C99/C11, no dependencies beyond `<stddef.h>`, `<stdlib.h>`, `<stdio.h>`,
   `<string.h>`, `<stdbool.h>`, and `<stdint.h>`.
 - Arbitrary topologies via a plain `size_t[]` array.
 - Configurable weight initialization (Xavier, He) per layer, automatic
