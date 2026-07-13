@@ -14,9 +14,9 @@
 #define MLP_H
 
 #define MLP_VERSION_MAJOR 0
-#define MLP_VERSION_MINOR 6
-#define MLP_VERSION_PATCH 2
-#define MLP_VERSION_STRING "0.6.2"
+#define MLP_VERSION_MINOR 7
+#define MLP_VERSION_PATCH 0
+#define MLP_VERSION_STRING "0.7.0"
 
 #define MLP_MAGIC   0x4D4C5032u /* "MLP2" */
 #define MLP_VERSION 2u
@@ -76,6 +76,7 @@ typedef enum {
     ACT_RELU,
     ACT_LEAKY_RELU,
     ACT_SIGMOID,
+    ACT_TANH,
 
     ACT_COUNT
 } Activation;
@@ -207,13 +208,16 @@ static inline Initializer _get_best_initializer(Activation act);
 static inline double _ReLU(double z);
 static inline double _Leaky_ReLU(double z);
 static inline double _Sigmoid(double z);
+static inline double _Tanh(double z);
 static inline double _activation(double z, Activation act);
+
 
 
 /* Derivative funcs */
 static inline double _ReLU_derivative(double activation);
 static inline double _Leaky_ReLU_derivative(double activation);
 static inline double _Sigmoid_derivative(double activation);
+static inline double _Tanh_derivative(double activation);
 static inline double _activation_derivative(double activation, Activation act);
 
 
@@ -411,6 +415,7 @@ static inline Initializer _get_best_initializer(Activation act){
         case ACT_LEAKY_RELU: return INIT_HE;
 
         case ACT_SIGMOID:
+        case ACT_TANH:
         case ACT_LINEAR:     return INIT_XAVIER;
         
         default:             return 0.0;        
@@ -439,6 +444,15 @@ static inline double _Sigmoid_derivative(double activation){
     return activation * (1.0 - activation);
 }
 
+static inline double _Tanh(double z){
+    if(z > 20.0)  return 1.0;
+    if(z < -20.0) return -1.0;
+    double exp_2x = _exponential(2.0 * z);
+    return (exp_2x - 1.0) / (exp_2x + 1.0);
+}
+static inline double _Tanh_derivative(double activation){
+    return 1.0 - activation * activation;
+}
 
 static inline double _activation(double z, Activation act){
     switch(act){
@@ -446,6 +460,7 @@ static inline double _activation(double z, Activation act){
         case ACT_RELU:          return _ReLU(z);
         case ACT_LEAKY_RELU:    return _Leaky_ReLU(z);
         case ACT_SIGMOID:       return _Sigmoid(z);
+        case ACT_TANH:          return _Tanh(z);
         default:                return z;
     }
     return z;
@@ -457,6 +472,7 @@ static inline double _activation_derivative(double activation, Activation act){
         case ACT_RELU:          return _ReLU_derivative(activation);
         case ACT_LEAKY_RELU:    return _Leaky_ReLU_derivative(activation);
         case ACT_SIGMOID:       return _Sigmoid_derivative(activation);
+        case ACT_TANH:          return _Tanh_derivative(activation);
         default:                return 1.0;
     }
     return 1.0;
