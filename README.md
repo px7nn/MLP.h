@@ -4,7 +4,7 @@ A tiny, single-header, dependency-free Multi-Layer Perceptron library for
 C. Drop `MLP.h` into your project — no build system, no linking, no
 external dependencies beyond the standard library.
 
-**Version:** 0.7.0 · **License:** [MIT](LICENSE)
+**Version:** 0.7.1 · **License:** [MIT](LICENSE)
 
 
 ## Features

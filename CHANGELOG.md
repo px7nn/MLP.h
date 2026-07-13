@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.1] - 2026-07-13
+
+### Added
+- Option to force standard `<math.h>` operations by defining `MLP_USE_LIBM`.
+- Automatic detection of prior `<math.h>` inclusion (via standard header guard macros `_MATH_H`, `_MATH_H_`, `_INC_MATH`) to use standard library math functions instead of internal custom fallbacks.
+- New internal `_mlp_use_custom_math` guard controlling compilation of the internal approximated math functions.
+
+### Changed
+- Configured core math-dependent operations (initialization, activation, loss) to call uppercase macros `_SQRT`, `_EXP`, and `_LOG` mapped to either standard library functions or custom approximations.
+
+---
+
 ## [0.7.0] - 2026-07-13
 
 ### Added

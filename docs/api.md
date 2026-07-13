@@ -9,8 +9,8 @@ including the header.
 ```c
 #define MLP_VERSION_MAJOR 0
 #define MLP_VERSION_MINOR 7
-#define MLP_VERSION_PATCH 0
-#define MLP_VERSION_STRING "0.7.0"
+#define MLP_VERSION_PATCH 1
+#define MLP_VERSION_STRING "0.7.1"
 
 #define MLP_MAGIC   0x4D4C5032u /* "MLP2" */
 #define MLP_VERSION 2u
@@ -34,6 +34,7 @@ includes the header.
 ```c
 #define MLP_EXIT_ON_ERROR   // opt-in: abort on any public API failure
 #define MLP_CSV_LINE_BUFFER 1024  // size of the internal CSV line buffer
+#define MLP_USE_LIBM        // opt-in: use math.h functions instead of custom ones
 ```
 
 - **`MLP_EXIT_ON_ERROR`** — if defined, every public API function that
@@ -47,6 +48,11 @@ includes the header.
   A row longer than this (including its newline) fails with
   `MLP_ERR_CSV_LINE_TOO_LONG`; raise this value if your CSV has very
   wide rows. Must be defined (if at all) before including `MLP.h`.
+- **`MLP_USE_LIBM`** — if defined, forces the library to use standard math
+  functions from `<math.h>` (e.g. `sqrt`, `exp`, `log`) for weight initialization,
+  activations, and loss calculations, rather than using the custom internal
+  approximations. Requires linking against the standard math library (e.g. `-lm` on Unix).
+  *Note: The library will also automatically detect and use `<math.h>` if the header has already been included in the translation unit before `MLP.h`.*
 
 ## Types
 

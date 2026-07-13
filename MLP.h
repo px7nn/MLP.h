@@ -15,8 +15,8 @@
 
 #define MLP_VERSION_MAJOR 0
 #define MLP_VERSION_MINOR 7
-#define MLP_VERSION_PATCH 0
-#define MLP_VERSION_STRING "0.7.0"
+#define MLP_VERSION_PATCH 1
+#define MLP_VERSION_STRING "0.7.1"
 
 #define MLP_MAGIC   0x4D4C5032u /* "MLP2" */
 #define MLP_VERSION 2u
@@ -195,11 +195,28 @@ static inline void _mlp_set_error(MLP_Error err);
 static void _print_summary(size_t epoch, size_t max_epochs, double loss, const char *reason);
 static bool _verify_net_d(const Network *net, const Dataset *d, const bool check_output);
 
-// to avoid using math.h
-static inline double _sqrt(double x);
+// check if mlp has libm, fallback to custom math functions
+#if defined(MLP_USE_LIBM) || defined(_MATH_H) || defined(_MATH_H_) || defined(_INC_MATH)
+    #include <math.h>
+
+    #define _SQRT sqrt 
+    #define _EXP  exp
+    #define _LOG  log
+#else
+    #define _mlp_use_custom_math
+
+    #define _SQRT _sqrt 
+    #define _EXP  _exponential
+    #define _LOG  _log
+#endif
+
+#ifdef _mlp_use_custom_math
+    static inline double _sqrt(double x);
+    static inline double _exponential(double x); 
+    static inline double _log(double x); 
+#endif
+
 static inline double _pow(double base, unsigned int exp);
-static inline double _exponential(double x); 
-static inline double _log(double x); 
 
 static inline double _initialize_weight(const size_t inputs, const Initializer initializer);
 static inline Initializer _get_best_initializer(Activation act);
@@ -345,22 +362,14 @@ static bool _verify_net_d(const Network *net, const Dataset *d, const bool check
     return true;
 }
 
+#ifdef _mlp_use_custom_math
+
 static inline double _sqrt(double x){
     if(x <= 0.0f) return 0.0f;
     double y = x;
     for(size_t i=0; i<5; ++i)
         y = 0.5f * (y + x/y);
     return y;
-}
-static inline double _pow(double base, unsigned int exp){
-    double res = 1.0;
-    while(exp){
-        if(exp & 1)
-            res *= base;
-        base *= base;
-        exp >>= 1;
-    }
-    return res;
 }
 
 static inline double _exponential(double x){
@@ -400,11 +409,24 @@ static inline double _log(double x){
     return y;
 }
 
+#endif
+
+static inline double _pow(double base, unsigned int exp){
+    double res = 1.0;
+    while(exp){
+        if(exp & 1)
+            res *= base;
+        base *= base;
+        exp >>= 1;
+    }
+    return res;
+}
+
 static inline double _initialize_weight(const size_t input_count, const Initializer initializer){
     double w= (((double)rand() / RAND_MAX) * 2.0 - 1.0);
     switch(initializer){
-        case INIT_XAVIER: return _sqrt(1 / (double)input_count) * w;
-        case INIT_HE:     return _sqrt(2 / (double)input_count) * w;
+        case INIT_XAVIER: return _SQRT(1 / (double)input_count) * w;
+        case INIT_HE:     return _SQRT(2 / (double)input_count) * w;
         default:          return 0.0;
     }
     return 0.0;
@@ -438,7 +460,7 @@ static inline double _Leaky_ReLU_derivative(double activation){
 }
 
 static inline double _Sigmoid(double z){
-    return 1.0 / (1.0 + _exponential(-z));
+    return 1.0 / (1.0 + _EXP(-z));
 }
 static inline double _Sigmoid_derivative(double activation){
     return activation * (1.0 - activation);
@@ -447,7 +469,7 @@ static inline double _Sigmoid_derivative(double activation){
 static inline double _Tanh(double z){
     if(z > 20.0)  return 1.0;
     if(z < -20.0) return -1.0;
-    double exp_2x = _exponential(2.0 * z);
+    double exp_2x = _EXP(2.0 * z);
     return (exp_2x - 1.0) / (exp_2x + 1.0);
 }
 static inline double _Tanh_derivative(double activation){
@@ -646,7 +668,7 @@ static inline double _loss(
             else if(pred > 1.0 - EPSILON)
                 pred = 1.0 - EPSILON;
 
-            return -(target * _log(pred) + (1.0 - target) * _log(1.0 - pred));
+            return -(target * _LOG(pred) + (1.0 - target) * _LOG(1.0 - pred));
         }
 
         default: return 0.0;
