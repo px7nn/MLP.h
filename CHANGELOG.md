@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.0] - 2026-07-13
+
+### Added
+- Hyperbolic tangent (`ACT_TANH`) activation function support.
+- Private math helper functions `_Tanh()` and `_Tanh_derivative()` avoiding `math.h` dependencies.
+- Automatic weight initializer mapping for `ACT_TANH` to `INIT_XAVIER`.
+
+### Docs
+- Updated `README.md`, `docs/api.md`, and `docs/theory.md` to document the new `ACT_TANH` activation function and its behaviors.
+
+---
+
 ## [0.6.2] - 2026-07-08
 
 ### Added

@@ -4,7 +4,7 @@ A tiny, single-header, dependency-free Multi-Layer Perceptron library for
 C. Drop `MLP.h` into your project — no build system, no linking, no
 external dependencies beyond the standard library.
 
-**Version:** 0.6.2 · **License:** [MIT](LICENSE)
+**Version:** 0.7.0 · **License:** [MIT](LICENSE)
 
 
 ## Features
@@ -14,7 +14,7 @@ external dependencies beyond the standard library.
 - Arbitrary topologies via a plain `size_t[]` array.
 - Configurable weight initialization (Xavier, He) per layer, automatic
   initializer selection based on activation, per-layer activation (linear,
-  ReLU, leaky ReLU, sigmoid), and selectable loss (MSE, binary cross-entropy)
+  ReLU, leaky ReLU, sigmoid, tanh), and selectable loss (MSE, binary cross-entropy)
   via `NetworkConfig`.
 - Full backpropagation + per-sample SGD training.
 - Single-sample prediction via `MLP_Predict()` and batch dataset prediction

@@ -13,7 +13,7 @@ builds two `Layer`s: one mapping 2 -> 8, one mapping 8 -> 1.
 
 Each layer's activation function is configured individually via
 `NetworkConfig.activations` (one entry per layer, i.e. `topology_size - 1`
-entries). Four are available:
+entries). Five are available:
 
 - `ACT_LINEAR` — `f(z) = z`. Typical choice for a regression output.
 - `ACT_RELU` — `f(z) = max(0, z)`.
@@ -23,6 +23,9 @@ entries). Four are available:
   hyperparameter to tune.
 - `ACT_SIGMOID` — squashes to `(0, 1)`; pairs naturally with
   `LOSS_BINARY_CROSS_ENTROPY` for binary classification output.
+- `ACT_TANH` — `f(z) = tanh(z)`. Hyperbolic tangent function, squashing
+  outputs to `(-1, 1)` and providing a zero-symmetric response. Often preferred
+  in hidden layers of shallow networks.
 
 There's no architectural restriction tying a particular activation to
 hidden vs. output layers — any layer can use any of the four.
@@ -33,7 +36,7 @@ Initial weights are set by `_initialize_weight` based on the `Initializer` strat
 
 - **`INIT_XAVIER`**: Xavier/Glorot initialization, scaling initial uniform weights by `sqrt(1 / inputs)`:  
   `w[j][k] = sqrt(1 / inputs) * r` where `r ~ U(-1, 1)`.  
-  Useful for keeping signal variance stable across layers. Automatically selected for `ACT_SIGMOID` and `ACT_LINEAR`.
+  Useful for keeping signal variance stable across layers. Automatically selected for `ACT_SIGMOID`, `ACT_TANH`, and `ACT_LINEAR`.
 - **`INIT_HE`**: He/Kaiming initialization, scaling initial uniform weights by `sqrt(2 / inputs)`:  
   `w[j][k] = sqrt(2 / inputs) * r` where `r ~ U(-1, 1)`.  
   Recommended to account for zeroed-out negative activations. Automatically selected for `ACT_RELU` and `ACT_LEAKY_RELU`.

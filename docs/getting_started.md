@@ -41,7 +41,7 @@ output, use `ACT_SIGMOID` on the last layer paired with
 `initializers` configures the weight initialization strategy for each layer
 (connection). Pass `MLP_AUTO_INITIALIZERS` (or `NULL`) to let the library
 automatically assign the best initializer for each layer based on its activation
-(He initialization for ReLU/Leaky ReLU, and Xavier for Sigmoid/Linear). Or,
+(He initialization for ReLU/Leaky ReLU, and Xavier for Sigmoid/Linear/Tanh). Or,
 pass a custom array of size `topology_size - 1` (e.g. `(Initializer[]){INIT_HE, INIT_XAVIER}`).
 
 ## 3. Wrap your data in a Dataset

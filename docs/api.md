@@ -8,9 +8,9 @@ including the header.
 
 ```c
 #define MLP_VERSION_MAJOR 0
-#define MLP_VERSION_MINOR 6
-#define MLP_VERSION_PATCH 2
-#define MLP_VERSION_STRING "0.6.2"
+#define MLP_VERSION_MINOR 7
+#define MLP_VERSION_PATCH 0
+#define MLP_VERSION_STRING "0.7.0"
 
 #define MLP_MAGIC   0x4D4C5032u /* "MLP2" */
 #define MLP_VERSION 2u
@@ -96,6 +96,7 @@ typedef enum {
     ACT_RELU,
     ACT_LEAKY_RELU,
     ACT_SIGMOID,
+    ACT_TANH,
 
     ACT_COUNT
 } Activation;
@@ -106,6 +107,8 @@ Per-layer activation function, set individually for every layer via
 `ACT_LINEAR` applies no nonlinearity (`f(z) = z`) and is the usual choice
 for a regression output; `ACT_SIGMOID` squashes to `(0, 1)` and pairs
 naturally with `LOSS_BINARY_CROSS_ENTROPY` for binary classification.
+`ACT_TANH` applies hyperbolic tangent (`f(z) = tanh(z)`), squashing output
+values to `(-1, 1)` and providing a zero-symmetric response.
 `ACT_COUNT` is a sentinel, not a real activation.
 
 ### `Loss`
