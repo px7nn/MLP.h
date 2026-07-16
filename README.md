@@ -1,11 +1,24 @@
-# MLP.h
+<img align="left" style="width:400px" src="./docs/interpolation_vs_extrapolation.png" width="488px" hspace="20">
 
-A tiny, single-header, dependency-free Multi-Layer Perceptron library for
-C. Drop `MLP.h` into your project — no build system, no linking, no
+<div id="toc">
+  <ul style="list-style: none">
+    <summary>
+      <h1>MLP.h</h1>
+    </summary>
+  </ul>
+</div>
+
+**A tiny, single-header, dependency-free Multi-Layer Perceptron library for C.**  
+Drop `MLP.h` into your project — no build system, no linking, no
 external dependencies beyond the standard library.
+
+<br/>
 
 **Version:** 0.7.1 · **License:** [MIT](LICENSE)
 
+---
+
+<br clear="left"/>
 
 ## Features
 

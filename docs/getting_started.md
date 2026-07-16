@@ -199,7 +199,8 @@ The [`examples/`](../examples/) directory has four runnable programs:
 - [`load_csv.c`](../examples/load_csv.c) — loads
   [`datasets/circle.csv`](../datasets/circle.csv) with `MLP_LoadCSV`,
   trains on it, predicts, and cleans up with `MLP_Destroy_Dataset`.
-- [`visual_sin.c`](../examples/visual_sin.c) — loads
-  [`datasets/sinewave_train.csv`](../datasets/sinewave_train.csv), trains a
-  network to fit a sine wave, predicts outputs over interpolation and
-  extrapolation ranges, and plots the results using gnuplot.
+- [`visual_sin.c`](../examples/visual_sin.c) — generates a training sine wave
+  in memory, trains a network to fit it, predicts outputs over interpolation and
+  extrapolation ranges, and outputs a dark-mode visualization plot.
+
+  ![Interpolation vs Extrapolation](./interpolation_vs_extrapolation.png)
