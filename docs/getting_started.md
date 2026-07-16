@@ -201,6 +201,6 @@ The [`examples/`](../examples/) directory has four runnable programs:
   trains on it, predicts, and cleans up with `MLP_Destroy_Dataset`.
 - [`visual_sin.c`](../examples/visual_sin.c) — generates a training sine wave
   in memory, trains a network to fit it, predicts outputs over interpolation and
-  extrapolation ranges, and outputs a dark-mode visualization plot.
+  extrapolation ranges, and outputs a visualization plot.
 
   ![Interpolation vs Extrapolation](./interpolation_vs_extrapolation.png)

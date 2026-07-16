@@ -93,20 +93,20 @@ Dataset init_data(double range, bool save_output){
 
 bool GNUPLOT(double *in, double *pred){
     size_t n_samples = SAMPLES(TS);
-    FILE *g = popen("gnuplot -persistant", "w");
+    FILE *g = popen("gnuplot", "w");
     if(!g){
         perror("gnuplot");
         return false;
     }
 
-    // fprintf(g, "set terminal pngcairo size 800,500 background rgb '#121212' font 'sans,10'\n");
-    // fprintf(g, "set output 'docs/interpolation_vs_extrapolation.png'\n");
+    fprintf(g, "set terminal pngcairo size 800,500 background rgb '#121212' font 'sans,10'\n");
+    fprintf(g, "set output '../docs/interpolation_vs_extrapolation.png'\n");
 
     /* purely for aesthetic purpose :) */
     fprintf(g, "set border lc rgb '#555555'\n");
     fprintf(g, "set grid lc rgb '#333333'\n");
     fprintf(g, "set xrange [0:%f]\n", TS);
-    fprintf(g, "set yrange [-2.0:2.0]\n");
+    fprintf(g, "set yrange [-2.5:2.5]\n");
     fprintf(g, "set xtics tc rgb '#cccccc'\n");
     fprintf(g, "set ytics tc rgb '#cccccc'\n");
     fprintf(g, "set title 'Neural Network Interpolation vs Extrapolation' tc rgb '#ffffff' font 'sans,12,bold'\n");
