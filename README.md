@@ -21,27 +21,11 @@ external dependencies beyond the standard library.
 
 ## Features
 
-- Single header, C99/C11, no dependencies beyond `<stddef.h>`, `<stdlib.h>`, `<stdio.h>`,
-  `<string.h>`, `<stdbool.h>`, and `<stdint.h>`.
-- Arbitrary topologies via a plain `size_t[]` array.
-- Configurable weight initialization (Xavier, He) per layer, automatic
-  initializer selection based on activation, per-layer activation (linear,
-  ReLU, leaky ReLU, sigmoid, tanh), and selectable loss (MSE, binary cross-entropy)
-  via `NetworkConfig`.
-- Full backpropagation + per-sample SGD training.
-- Single-sample prediction via `MLP_Predict()` and batch dataset prediction
-  via `MLP_Predict_Dataset()`.
-- Model serialization — `MLP_Save_Network()` / `MLP_Load_Network()`
-  round-trip a trained network to/from a file.
-- CSV dataset loading — `MLP_LoadCSV()` reads a delimited file straight
-  into a `Dataset`, with an optional header row and structured parse
-  errors.
-- Structured error handling via `MLP_GetLastError()` / `MLP_ErrorString()`,
-  with an opt-in `MLP_EXIT_ON_ERROR` fail-fast mode for small programs.
-- No hidden allocations you don't control by default — datasets built
-  with `MLP_Create_Dataset` are just pointers into your own arrays.
-  (`MLP_LoadCSV`-allocated datasets are the one exception — free those
-  with `MLP_Destroy_Dataset`.)
+- **Zero External Dependencies:** Pure, portable C99/C11. No linking required, with optional `<math.h>` support (`MLP_USE_LIBM`).
+- **Flexible Network Configuration:** Configure arbitrary topologies, activation functions (`ReLU`, `Leaky ReLU`, `Sigmoid`, `Tanh`, `Linear`), weight initializers (`He`, `Xavier`), and loss functions (`MSE`, `BCE`) via `NetworkConfig`.
+- **Model Persistence:** Easily save and load trained networks to/from disk using compact binary files.
+- **Built-in CSV Parsing:** Streamline dataset preparation with automated CSV loading (`MLP_LoadCSV`) or wrap existing memory arrays.
+- **Structured Error Handling:** Features a robust global error reporting system with an opt-in fail-fast check (`MLP_EXIT_ON_ERROR`) to keep client code completely clean.
 
 ## Quick start
 
