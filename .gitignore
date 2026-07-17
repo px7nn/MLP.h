@@ -1,3 +1,6 @@
 *.out
 *.exe
 *.mlp
+
+mnist_*.csv
+*log.csv
