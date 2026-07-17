@@ -86,13 +86,14 @@ arrays on the heap — free them with `MLP_Destroy_Dataset(&d)` (not
 TrainOptions opt = MLP_DefaultTrainOptions();
 opt.max_epochs    = 5000;
 opt.learning_rate = 0.05;
-opt.verbose       = true; // prints a progress bar + loss
+opt.verbose       = true;        // prints a progress bar + loss
+opt.loss_file     = "loss.csv";  // optional: logs epoch loss history as CSV
 
 MLP_Train(&net, &d, &opt);
 ```
 
 `MLP_Train` runs full-batch-per-sample SGD (it updates weights after every
-sample, not once per epoch) and minimizes mean squared error.
+sample, not once per epoch) and minimizes the configured loss function (e.g. MSE, BCE, or CCE).
 
 ## 5. Predict
 
@@ -190,7 +191,7 @@ to recover from errors instead of aborting.
 
 ## Full examples
 
-The [`examples/`](../examples/) directory has four runnable programs:
+The [`examples/`](../examples/) directory has five runnable programs:
 
 - [`xor_gate.c`](../examples/xor_gate.c) — trains a network on XOR from
   scratch and saves it to `xor.mlp`.
@@ -203,4 +204,8 @@ The [`examples/`](../examples/) directory has four runnable programs:
   in memory, trains a network to fit it, predicts outputs over interpolation and
   extrapolation ranges, and outputs a visualization plot.
 
-  ![Interpolation vs Extrapolation](./interpolation_vs_extrapolation.png)
+  ![Interpolation vs Extrapolation](./images/interpolation_vs_extrapolation.png)
+
+- [`mnist.c`](../examples/mnist.c) — loads MNIST handwritten digits, normalizes pixel values, trains a network using `Softmax` activation and `Categorical Cross Entropy` loss, and reports test classification accuracy.
+
+  ![MNIST Loss Graph](./images/mnist_loss.png)

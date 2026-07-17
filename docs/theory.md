@@ -13,7 +13,7 @@ builds two `Layer`s: one mapping 2 -> 8, one mapping 8 -> 1.
 
 Each layer's activation function is configured individually via
 `NetworkConfig.activations` (one entry per layer, i.e. `topology_size - 1`
-entries). Five are available:
+entries). Six are available:
 
 - `ACT_LINEAR` — `f(z) = z`. Typical choice for a regression output.
 - `ACT_RELU` — `f(z) = max(0, z)`.
@@ -26,6 +26,9 @@ entries). Five are available:
 - `ACT_TANH` — `f(z) = tanh(z)`. Hyperbolic tangent function, squashing
   outputs to `(-1, 1)` and providing a zero-symmetric response. Often preferred
   in hidden layers of shallow networks.
+- `ACT_SOFTMAX` — `f(z)_i = exp(z_i) / Σ_j exp(z_j)`. Normalizes output values
+  across all neurons in the layer so they sum to `1.0`. Only supported on the network's
+  final output layer (not hidden layers) and must be paired with `LOSS_CATEGORICAL_CROSS_ENTROPY`.
 
 There's no architectural restriction tying a particular activation to
 hidden vs. output layers — any layer can use any of the four.
@@ -75,6 +78,13 @@ L = (1/n_outputs) * sum_i (pred[i] - target[i])^2
 L = -(1/n_outputs) * sum_i [ target[i]*log(pred[i]) + (1-target[i])*log(1-pred[i]) ]
 ```
 
+- **`LOSS_CATEGORICAL_CROSS_ENTROPY`** — intended for multi-class classification
+  (using output dimensions > 1) paired with an `ACT_SOFTMAX` output layer:
+
+```
+L = -sum_i (target[i] * log(pred[i]))
+```
+
 Note that the reported loss and early-stop checks in `MLP_Train` are calculated
 using the active loss function configured for the network, rather than defaulting
 to mean squared error. Average loss values are normalized across both samples and
@@ -89,18 +99,19 @@ weight.
 **Output layer delta** depends on `net->loss`:
 
 ```
-LOSS_MSE:                   delta_output[i] = (pred[i] - target[i]) * f'(pred[i])
-LOSS_BINARY_CROSS_ENTROPY:  delta_output[i] = (pred[i] - target[i])
+LOSS_MSE:                         delta_output[i] = (pred[i] - target[i]) * f'(pred[i])
+LOSS_BINARY_CROSS_ENTROPY:        delta_output[i] = (pred[i] - target[i])
+LOSS_CATEGORICAL_CROSS_ENTROPY:   delta_output[i] = (pred[i] - target[i])
 ```
 
 where `f'` is the output layer's activation derivative. For
 `LOSS_MSE` this is the plain chain-rule derivative. For
-`LOSS_BINARY_CROSS_ENTROPY` the `f'(pred[i])` term cancels out of the true
-derivative when paired with a sigmoid output, leaving the simplified
-`pred - target` form — this is what `MLP_Train` computes regardless of
-what activation the output layer actually uses, so pairing
-`LOSS_BINARY_CROSS_ENTROPY` with a non-sigmoid output layer will still
-train, but the gradient won't correspond to that loss's true derivative.
+`LOSS_BINARY_CROSS_ENTROPY` and `LOSS_CATEGORICAL_CROSS_ENTROPY`, the `f'(pred[i])`
+derivative term cancels out of the true derivative when paired with a sigmoid or
+softmax output respectively, leaving the simplified `pred - target` form — this is what
+`MLP_Train` computes regardless of what activation the output layer actually uses.
+Pairing them with incompatible output activations will still train, but the gradient
+won't correspond to that loss's true mathematical derivative.
 
 **Hidden layer delta** propagates the next layer's deltas backward through
 that layer's weights, then multiplies by the local layer's own

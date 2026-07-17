@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.0] - 2026-07-17
+
+### Added
+- Support for multi-class classification using Softmax activation (`ACT_SOFTMAX`) and Categorical Cross Entropy loss (`LOSS_CATEGORICAL_CROSS_ENTROPY`).
+- Option to log epoch loss history to a CSV file using the `loss_file` field in `TrainOptions`.
+- Added the `mnist.c` handwritten digits classification example.
+- Validation checks in `MLP_Create_Network()` ensuring activation/loss compatibility (Softmax requires CCE, Sigmoid requires BCE).
+- Added `docs/images/mnist_loss.png` dark-theme portrait loss plot asset.
+
+### Docs
+- Updated `README.md`, `docs/api.md`, `docs/getting_started.md`, and `docs/theory.md` to document `ACT_SOFTMAX`, `LOSS_CATEGORICAL_CROSS_ENTROPY`, `TrainOptions.loss_file`, and the new MNIST example.
+
+---
+
 ## [0.7.1] - 2026-07-13
 
 ### Added

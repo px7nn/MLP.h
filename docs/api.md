@@ -8,9 +8,9 @@ including the header.
 
 ```c
 #define MLP_VERSION_MAJOR 0
-#define MLP_VERSION_MINOR 7
-#define MLP_VERSION_PATCH 1
-#define MLP_VERSION_STRING "0.7.1"
+#define MLP_VERSION_MINOR 8
+#define MLP_VERSION_PATCH 0
+#define MLP_VERSION_STRING "0.8.0"
 
 #define MLP_MAGIC   0x4D4C5032u /* "MLP2" */
 #define MLP_VERSION 2u
@@ -103,6 +103,7 @@ typedef enum {
     ACT_LEAKY_RELU,
     ACT_SIGMOID,
     ACT_TANH,
+    ACT_SOFTMAX,
 
     ACT_COUNT
 } Activation;
@@ -115,6 +116,10 @@ for a regression output; `ACT_SIGMOID` squashes to `(0, 1)` and pairs
 naturally with `LOSS_BINARY_CROSS_ENTROPY` for binary classification.
 `ACT_TANH` applies hyperbolic tangent (`f(z) = tanh(z)`), squashing output
 values to `(-1, 1)` and providing a zero-symmetric response.
+`ACT_SOFTMAX` normalizes output values across all output neurons such that they
+sum to `1.0`, expressing a probability distribution. It is only supported on the
+network's final output layer (not hidden layers) and must be paired with
+`LOSS_CATEGORICAL_CROSS_ENTROPY`.
 `ACT_COUNT` is a sentinel, not a real activation.
 
 ### `Loss`
@@ -123,6 +128,7 @@ values to `(-1, 1)` and providing a zero-symmetric response.
 typedef enum {
     LOSS_MSE,
     LOSS_BINARY_CROSS_ENTROPY,
+    LOSS_CATEGORICAL_CROSS_ENTROPY,
 
     LOSS_COUNT
 } Loss;
@@ -135,6 +141,9 @@ representing a probability; `MLP_Train` combines it with `ACT_SIGMOID`
 using the standard simplified gradient (`pred - target`), so pairing
 `LOSS_BINARY_CROSS_ENTROPY` with a non-sigmoid output layer will train,
 but the gradient won't correspond to that loss's true derivative.
+`LOSS_CATEGORICAL_CROSS_ENTROPY` is intended for multi-class classification
+(with output dimensions > 1) and must be paired with an `ACT_SOFTMAX` output layer.
+`MLP_Train` optimizes it using the unified gradient `(pred - target)`.
 `LOSS_COUNT` is a sentinel, not a real loss.
 
 ### `Initializer`
@@ -157,10 +166,11 @@ Weight initialization strategy, set for each connection layer via `NetworkConfig
 
 ```c
 typedef struct {
-    size_t max_epochs;
-    double learning_rate;
-    double stop_loss;
-    bool   verbose;
+    size_t      max_epochs;
+    double      learning_rate;
+    double      stop_loss;
+    bool        verbose;
+    const char *loss_file;
 } TrainOptions;
 ```
 
@@ -170,6 +180,7 @@ typedef struct {
 | `learning_rate` | Step size used in gradient descent.                              |
 | `stop_loss`     | Training stops early once mean epoch loss drops to or below this.|
 | `verbose`       | If true, prints a progress bar and a summary line per epoch.     |
+| `loss_file`     | File path to log the epoch loss history as CSV (disabled if `NULL`). |
 
 Get sane defaults with `MLP_DefaultTrainOptions()`.
 
@@ -275,7 +286,7 @@ fields NULL/0) if `samples` is NULL or `n_samples`/`n_features` is 0.
 TrainOptions MLP_DefaultTrainOptions(void);
 ```
 
-Returns `{ max_epochs: 1000, learning_rate: 1e-3, stop_loss: 1e-8, verbose: false }`.
+Returns `{ max_epochs: 1000, learning_rate: 1e-3, stop_loss: 1e-8, verbose: false, loss_file: NULL }`.
 
 ### `MLP_Create_Network`
 
@@ -483,6 +494,14 @@ Returns a static, human-readable description of `err` (e.g. `"Memory
 allocation failed"`). Typically called as
 `MLP_ErrorString(MLP_GetLastError())` right after a function returns
 `false`/zeroed. Unknown values return `"Unknown error"`.
+
+### `MLP_Perror`
+
+```c
+void MLP_Perror(const char *str);
+```
+
+Prints `str` followed by a human-readable description of the last error (equivalent to `MLP_ErrorString(MLP_GetLastError())`) to standard output. Designed to match standard library `perror` usage.
 
 ## Notes on the private API
 

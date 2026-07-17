@@ -1,14 +1,27 @@
 /*
-    [########################################] 100% Epoch    50/   50  Loss 1.317e-02
+    Example: MNIST Handwritten Digit Classification
 
-    Training completed.
+    This example trains an MLP on the MNIST dataset to classify handwritten digits.
+    
+    Dataset setup:
+    1. Download the MNIST dataset in CSV format:
+       - Train (60,000 samples): https://pjreddie.com/media/files/mnist_train.csv
+       - Test (10,000 samples):  https://pjreddie.com/media/files/mnist_test.csv
+    2. Place these files in your "datasets" directory as:
+       - datasets/mnist_train.csv
+       - datasets/mnist_test.csv
 
-    Epochs     : 50
-    Final Loss : 1.31719803e-02
-    Reason     : Maximum epochs reached
+    Results:
+        [########################################] 100% Epoch    50/   50  Loss 1.317e-02
 
-    Score: 9771/10000
-    Accuracy: 97.71
+        Training completed.
+
+        Epochs     : 50
+        Final Loss : 1.31719803e-02
+        Reason     : Maximum epochs reached
+
+        Score: 9771/10000
+        Accuracy: 97.71%
 */
 
 
@@ -102,7 +115,7 @@ int main(){
     }
 
     printf("Score: %zu/%zu\n", correct, tsd.n_samples);
-    printf("Accuracy: %.2f", (float)correct/tsd.n_samples * 100.0);
+    printf("Accuracy: %.2f%", (float)correct/tsd.n_samples * 100.0);
 
     goto destroy; 
 
