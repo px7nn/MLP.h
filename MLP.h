@@ -14,9 +14,9 @@
 #define MLP_H
 
 #define MLP_VERSION_MAJOR 0
-#define MLP_VERSION_MINOR 7
-#define MLP_VERSION_PATCH 1
-#define MLP_VERSION_STRING "0.7.1"
+#define MLP_VERSION_MINOR 8
+#define MLP_VERSION_PATCH 0
+#define MLP_VERSION_STRING "0.8.0"
 
 #define MLP_MAGIC   0x4D4C5032u /* "MLP2" */
 #define MLP_VERSION 2u
@@ -45,6 +45,8 @@ typedef enum {
  
     MLP_ERR_NULL_POINTER,        // A required pointer argument was NULL
     MLP_ERR_INVALID_ARGUMENT,    // An argument was structurally invalid (e.g. zero-sized)
+    MLP_ERR_BAD_PAIRING,         // Invalid activation/loss pairing
+    MLP_ERR_COMPATIBILITY,       // MLP doesnt support a given activation in hidden layer  
     MLP_ERR_ALLOC_FAILED,        // A heap allocation failed
     MLP_ERR_SHAPE_MISMATCH,      // Network/Dataset dimensions are incompatible
  
@@ -78,12 +80,15 @@ typedef enum {
     ACT_SIGMOID,
     ACT_TANH,
 
+    ACT_SOFTMAX,
+
     ACT_COUNT
 } Activation;
 
 typedef enum {
     LOSS_MSE,
     LOSS_BINARY_CROSS_ENTROPY,
+    LOSS_CATEGORICAL_CROSS_ENTROPY,
 
     LOSS_COUNT
 } Loss;
@@ -108,6 +113,7 @@ typedef struct {
     double learning_rate;
     double stop_loss;
     bool verbose;
+    const char *loss_file;
 } TrainOptions;
 
 
@@ -143,6 +149,7 @@ typedef struct {
 =============================================================================*/
 
 typedef struct {
+    double **z;           // layers * topology_size[i]
     double **activations; // layers * topology_size[i]
     double **deltas;      // layers * topology_size[i]
 
@@ -226,6 +233,7 @@ static inline double _ReLU(double z);
 static inline double _Leaky_ReLU(double z);
 static inline double _Sigmoid(double z);
 static inline double _Tanh(double z);
+static        void   _Softmax(const double *z, double *output, size_t N);
 static inline double _activation(double z, Activation act);
 
 
@@ -278,7 +286,14 @@ static void _exit_on_failure(){
         exit(EXIT_FAILURE);
     #endif
 }
- 
+
+static void MLP_Perror(const char *str){
+    printf("%s: %s\n",
+        str,
+        MLP_ErrorString(MLP_GetLastError())
+    );
+}
+
 static MLP_Error MLP_GetLastError(void){
     return _mlp_last_error;
 }
@@ -288,6 +303,8 @@ static const char *MLP_ErrorString(MLP_Error err){
         case MLP_OK:                      return "No error";
         case MLP_ERR_NULL_POINTER:        return "A required argument was NULL";
         case MLP_ERR_INVALID_ARGUMENT:    return "An argument was invalid";
+        case MLP_ERR_BAD_PAIRING:         return "Output activation is incompatible with the selected loss";
+        case MLP_ERR_COMPATIBILITY:       return "MLP doesnt support SOFTMAX activation in hidden layers";
         case MLP_ERR_ALLOC_FAILED:        return "Memory allocation failed";
         case MLP_ERR_SHAPE_MISMATCH:      return "Network and dataset dimensions are incompatible";
         case MLP_ERR_FILE_OPEN:           return "Could not open file";
@@ -476,6 +493,22 @@ static inline double _Tanh_derivative(double activation){
     return 1.0 - activation * activation;
 }
 
+static void _Softmax(const double *z, double *output, size_t N){
+    double max = z[0];
+    for(size_t i=0; i<N; ++i)
+        if(max < z[i])
+            max = z[i];
+    
+    double sum = 0;
+    for(size_t i=0; i<N; ++i){
+        output[i] = _EXP(z[i] - max);
+        sum += output[i];
+    }
+
+    for(size_t i=0; i<N; ++i)
+        output[i] /= sum;
+}
+
 static inline double _activation(double z, Activation act){
     switch(act){
         case ACT_LINEAR:        return z;
@@ -511,18 +544,25 @@ static _Workspace _Workspace_Create(const Network *net){
     // so activations[i+1]/deltas[i+1] line up with net->layers[i]'s output.
     ws.layers = net->n_layers + 1;
 
+    ws.z           = calloc(ws.layers, sizeof *ws.z);
     ws.activations = calloc(ws.layers, sizeof *ws.activations);
     ws.deltas      = calloc(ws.layers, sizeof *ws.deltas);
 
-    if(!ws.activations || !ws.deltas)
+    if(!ws.z || !ws.activations || !ws.deltas)
         goto fail;
 
+    ws.z[0] = calloc(net->layers[0].inputs, sizeof *ws.z[0]);
     ws.activations[0] = calloc(net->layers[0].inputs, sizeof *ws.activations[0]);
 
-    if(!ws.activations[0])
+    if(!ws.z[0] || !ws.activations[0])
         goto fail;
 
     for(size_t i=0; i < net->n_layers; ++i){
+
+        ws.z[i+1] = calloc(
+            net->layers[i].neurons, 
+            sizeof *ws.z[i+1]
+        );
 
         ws.activations[i+1] = calloc(
             net->layers[i].neurons, 
@@ -534,13 +574,19 @@ static _Workspace _Workspace_Create(const Network *net){
             sizeof *ws.deltas[i+1]
         );
 
-        if(!ws.activations[i+1] || !ws.deltas[i+1])
+        if(!ws.z[i+1] || !ws.activations[i+1] || !ws.deltas[i+1])
             goto fail;
     }
 
     return ws;
 
     fail:
+        if (ws.z) {
+            for (size_t i = 0; i < ws.layers; ++i)
+                free(ws.z[i]);
+            free(ws.z);
+        }
+
         if (ws.activations) {
             for (size_t i = 0; i < ws.layers; ++i)
                 free(ws.activations[i]);
@@ -563,15 +609,15 @@ static void _Workspace_Destroy(_Workspace *ws){
         return;
 
     for(size_t i = 0; i < ws->layers; ++i){
+        free(ws->z[i]);
         free(ws->activations[i]);
         free(ws->deltas[i]);
     }
+    free(ws->z);
     free(ws->activations);
     free(ws->deltas);
 
-    ws->activations = NULL;
-    ws->deltas     = NULL;
-    ws->layers     = 0;
+    *ws = (_Workspace){0};
 }
 
 
@@ -595,8 +641,13 @@ static void _forward(
             for(size_t k=0; k < layer->inputs; ++k){
                 sum += layer->weights[j * layer->inputs + k] * input[k];
             }
-            output[j] = _activation(sum, layer->activation);
+            ws->z[i+1][j] = sum;
         }
+        if(layer->activation == ACT_SOFTMAX)
+            _Softmax(ws->z[i+1], output, layer->neurons);
+        else
+            for(size_t j=0; j < layer->neurons; ++j)
+                output[j] = _activation(ws->z[i+1][j], layer->activation);
     }
 }
 
@@ -617,6 +668,7 @@ static void _backprop(
                 ws->deltas[last][i] = (pred - target[i]) * _activation_derivative(pred, output->activation);
                 break;
             case LOSS_BINARY_CROSS_ENTROPY:
+            case LOSS_CATEGORICAL_CROSS_ENTROPY:
                 ws->deltas[last][i] = (pred - target[i]);
                 break;
             default:
@@ -671,6 +723,16 @@ static inline double _loss(
             return -(target * _LOG(pred) + (1.0 - target) * _LOG(1.0 - pred));
         }
 
+        case LOSS_CATEGORICAL_CROSS_ENTROPY:{
+            double const EPSILON = 1e-15; // to prevent _log(0)
+            if(pred < EPSILON)
+                pred = EPSILON;
+            else if(pred > 1.0 - EPSILON)
+                pred = 1.0 - EPSILON;
+
+            return -target * _LOG(pred);
+
+        }
         default: return 0.0;
     }
     return 0.0;
@@ -683,6 +745,7 @@ static TrainOptions MLP_DefaultTrainOptions(void){
         .learning_rate = 1e-3,
         .stop_loss = 1e-8,
         .verbose = false,
+        .loss_file = NULL
     };
 }
 
@@ -733,7 +796,7 @@ static Network MLP_Create_Network(const NetworkConfig *cfg){
             return net;
         }
 
-    for(size_t i = 0; i < n_layers; ++i)
+    for(size_t i = 0; i < n_layers-1; ++i){
         if (cfg->activations[i] >= ACT_COUNT
             || cfg->initializers && cfg->initializers[i] >= INIT_COUNT
         ){
@@ -741,9 +804,22 @@ static Network MLP_Create_Network(const NetworkConfig *cfg){
             _exit_on_failure();
             return net;
         }
+        if(cfg->activations[i] == ACT_SOFTMAX){
+            _mlp_set_error(MLP_ERR_COMPATIBILITY);
+            _exit_on_failure();
+            return net;
+        }
+    }
     
-    if(cfg->loss >= LOSS_COUNT){
+    if(cfg->activations[n_layers-1] >= ACT_COUNT || cfg->loss >= LOSS_COUNT){
         _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
+        _exit_on_failure();
+        return net;
+    }
+
+    if(cfg->loss == LOSS_CATEGORICAL_CROSS_ENTROPY && cfg->activations[n_layers-1] != ACT_SOFTMAX
+        || cfg->loss == LOSS_BINARY_CROSS_ENTROPY  && cfg->activations[n_layers-1] != ACT_SIGMOID){
+        _mlp_set_error(MLP_ERR_BAD_PAIRING);
         _exit_on_failure();
         return net;
     }
@@ -878,6 +954,17 @@ static bool MLP_Train(
     if (!ws.activations)
         return false;
     
+    FILE *fp;
+    if(options->loss_file){
+        fp = fopen(options->loss_file, "w");
+        if(!fp){
+            _mlp_set_error(MLP_ERR_FILE_OPEN);
+            _exit_on_failure();
+            return false;
+        }
+        fprintf(fp, "epoch,loss\n");
+    }
+
     double loss = 0.0;
     size_t epch = 0;
 
@@ -911,7 +998,13 @@ static bool MLP_Train(
             }
         }
 
-        loss /= (double)(d->n_samples * d->n_outputs);
+        if(net->loss == LOSS_CATEGORICAL_CROSS_ENTROPY)
+            loss /= (double)(d->n_samples);
+        else
+            loss /= (double)(d->n_samples * d->n_outputs);
+        
+        if(options->loss_file)
+            fprintf(fp, "%zu,%lf\n", epoch, loss);
 
         if(options->verbose)
             _print_summary(epch, options->max_epochs, loss, NULL);
@@ -926,6 +1019,9 @@ static bool MLP_Train(
 
     if(options->verbose && epch)
         _print_summary(epch, options->max_epochs, loss, "Maximum epochs reached");
+
+    if(fp)
+        fclose(fp);
 
     _Workspace_Destroy(&ws);
     return true;
@@ -1191,9 +1287,15 @@ static Dataset MLP_LoadCSV(
 
     char line[MLP_CSV_LINE_BUFFER];
 
-    if(has_header && !fgets(line, sizeof line, fp)){
-        _mlp_set_error(MLP_ERR_CSV_HEADER);
-        goto fail;
+    if(has_header){
+        if(!fgets(line, sizeof line, fp)){
+            _mlp_set_error(MLP_ERR_CSV_HEADER);
+            goto fail;
+        }
+        if(!strchr(line, '\n') && !feof(fp)){
+            _mlp_set_error(MLP_ERR_CSV_LINE_TOO_LONG);
+            goto fail;
+        }
     }
 
     size_t sample = 0;
