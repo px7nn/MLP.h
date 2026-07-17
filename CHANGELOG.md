@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 - Added the `mnist.c` handwritten digits classification example.
 - Validation checks in `MLP_Create_Network()` ensuring activation/loss compatibility (Softmax requires CCE, Sigmoid requires BCE).
 - Added `docs/images/mnist_loss.png` dark-theme portrait loss plot asset.
+- Added `MLP_Perror()`. (equivalent to `MLP_ErrorString(MLP_GetLastError())`)
 
 ### Docs
 - Updated `README.md`, `docs/api.md`, `docs/getting_started.md`, and `docs/theory.md` to document `ACT_SOFTMAX`, `LOSS_CATEGORICAL_CROSS_ENTROPY`, `TrainOptions.loss_file`, and the new MNIST example.

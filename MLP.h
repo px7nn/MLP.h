@@ -182,6 +182,8 @@ static void    MLP_Destroy_Network(Network *net);
 static bool MLP_Save_Network(const Network *net, const char *filename);
 static bool MLP_Load_Network(Network *net, const char *filename);
 
+
+static void MLP_Perror(const char *str);
 static const char *MLP_ErrorString(MLP_Error err);
 static MLP_Error   MLP_GetLastError(void);
 
