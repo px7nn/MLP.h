@@ -9,11 +9,11 @@ including the header.
 ```c
 #define MLP_VERSION_MAJOR 0
 #define MLP_VERSION_MINOR 8
-#define MLP_VERSION_PATCH 0
-#define MLP_VERSION_STRING "0.8.0"
+#define MLP_VERSION_PATCH 1
+#define MLP_VERSION_STRING "0.8.1"
 
-#define MLP_MAGIC   0x4D4C5032u /* "MLP2" */
-#define MLP_VERSION 2u
+#define MLP_MAGIC   0x4D4C5033u /* "MLP3" */
+#define MLP_VERSION 3u
 ```
 
 `MLP_VERSION_*`/`MLP_VERSION_STRING` describe the library release (see
@@ -21,9 +21,11 @@ including the header.
 `MLP_VERSION` are separate — they identify the on-disk **model file
 format** used by `MLP_Save_Network`/`MLP_Load_Network`, and only change when that binary
 format changes, independently of the library's own version number.
-`MLP_VERSION` was bumped to `2` in `0.4.0` because saved files now also
-store each layer's `Activation`; a `0.3.0` model file (`MLP_VERSION 1`)
-will fail to load with `MLP_ERR_FILE_FORMAT` — retrain and re-save it.
+`MLP_VERSION` was bumped to `3` in `0.8.0` to serialize all metadata fields (`n_layers`,
+`loss`, `neurons`, `inputs`, `activation`) as fixed-width `uint32_t` values, ensuring saved
+model files are fully platform-independent and can be shared between 32-bit and 64-bit architectures.
+Legacy model files (`MLP_VERSION 2` or `1`) will fail to load with `MLP_ERR_FILE_FORMAT` —
+retrain and re-save them.
 
 ## Configuration macros
 

@@ -15,11 +15,11 @@
 
 #define MLP_VERSION_MAJOR 0
 #define MLP_VERSION_MINOR 8
-#define MLP_VERSION_PATCH 0
-#define MLP_VERSION_STRING "0.8.0"
+#define MLP_VERSION_PATCH 1
+#define MLP_VERSION_STRING "0.8.1"
 
-#define MLP_MAGIC   0x4D4C5032u /* "MLP2" */
-#define MLP_VERSION 2u
+#define MLP_MAGIC   0x4D4C5033u /* "MLP3" */
+#define MLP_VERSION 3u
 
 
 #ifndef MLP_CSV_LINE_BUFFER
@@ -1100,21 +1100,26 @@ static bool MLP_Save_Network(const Network *net, const char *filename){
         return false;
     }
 
-    uint32_t magic   = MLP_MAGIC;
-    uint32_t version = MLP_VERSION;
+    uint32_t magic    = MLP_MAGIC;
+    uint32_t version  = MLP_VERSION;
+    uint32_t n_layers = (uint32_t)net->n_layers;
+    uint32_t loss     = (uint32_t)net->loss;
 
-    if (fwrite(&magic,            sizeof magic,         1, fp) != 1
-        || fwrite(&version,       sizeof version,       1, fp) != 1
-        || fwrite(&net->n_layers, sizeof net->n_layers, 1, fp) != 1
-        || fwrite(&net->loss,     sizeof net->loss,     1, fp) != 1
+    if (fwrite(&magic,       sizeof magic,         1, fp) != 1
+        || fwrite(&version,  sizeof version,       1, fp) != 1
+        || fwrite(&n_layers, sizeof n_layers,      1, fp) != 1
+        || fwrite(&loss,     sizeof loss,          1, fp) != 1
     ) goto fail;
 
     for(size_t i=0; i<net->n_layers; ++i){
         const Layer *layer = &net->layers[i];
 
-        if (fwrite(&layer->neurons,       sizeof layer->neurons,     1, fp) != 1
-            || fwrite(&layer->inputs,     sizeof layer->inputs,      1, fp) != 1
-            || fwrite(&layer->activation, sizeof layer->activation,  1, fp) != 1
+        uint32_t neurons    = (uint32_t)layer->neurons;
+        uint32_t inputs     = (uint32_t)layer->inputs;
+        uint32_t activation = (uint32_t)layer->activation;
+        if (fwrite(&neurons,       sizeof neurons,     1, fp) != 1
+            || fwrite(&inputs,     sizeof inputs,      1, fp) != 1
+            || fwrite(&activation, sizeof activation,  1, fp) != 1
         ) goto fail;
 
         if(fwrite(
@@ -1171,12 +1176,18 @@ static bool MLP_Load_Network(Network *net, const char *filename){
 
     MLP_Destroy_Network(net);
 
-    if (fread(&net->n_layers, sizeof net->n_layers, 1, fp) != 1
-        || fread(&net->loss,  sizeof net->loss,     1, fp) != 1
+    uint32_t n_layers;
+    uint32_t loss;
+
+    if (fread(&n_layers, sizeof n_layers, 1, fp) != 1
+        || fread(&loss,  sizeof loss,     1, fp) != 1
     ){
         _mlp_set_error(MLP_ERR_FILE_READ);
         goto fail;
     }
+
+    net->n_layers = (size_t)n_layers;
+    net->loss     = (Loss)loss;
 
     if(net->loss >= LOSS_COUNT){
         _mlp_set_error(MLP_ERR_FILE_FORMAT);
@@ -1191,14 +1202,19 @@ static bool MLP_Load_Network(Network *net, const char *filename){
 
     for(size_t i=0; i<net->n_layers; ++i){
         Layer *layer = &net->layers[i];
-
-        if (fread(&layer->neurons,       sizeof layer->neurons,     1, fp) != 1
-            || fread(&layer->inputs,     sizeof layer->inputs,      1, fp) != 1
-            || fread(&layer->activation, sizeof layer->activation,  1, fp) != 1
+        
+        uint32_t neurons, inputs, activation;
+        if (fread(&neurons,       sizeof neurons,     1, fp) != 1
+            || fread(&inputs,     sizeof inputs,      1, fp) != 1
+            || fread(&activation, sizeof activation,  1, fp) != 1
         ){
             _mlp_set_error(MLP_ERR_FILE_READ);
             goto fail;
         }
+        layer->neurons    = (size_t)neurons;
+        layer->inputs     = (size_t)inputs;
+        layer->activation = (Activation)activation;
+
         if(layer->activation >= ACT_COUNT){
             _mlp_set_error(MLP_ERR_FILE_FORMAT);
             goto fail;

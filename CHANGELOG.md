@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.1] - 2026-07-18
+
+### Changed
+- Bumped model serialization format magic to `MLP_MAGIC = 0x4D4C5033u` ("MLP3") and version to `MLP_VERSION = 3u`.
+- Configured network metadata (`n_layers`, `loss`, `neurons`, `inputs`, `activation`) to serialize as fixed-width `uint32_t` values, making binary model files fully platform-independent and compatible between 32-bit and 64-bit architectures.
+
+### Docs
+- Updated `docs/api.md` to document the `MLP_VERSION 3` file format compatibility.
+
+---
+
 ## [0.8.0] - 2026-07-17
 
 ### Added
