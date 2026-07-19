@@ -39,7 +39,7 @@ Score: 9771/10000
 Accuracy: 97.71%
 ```
 
-**Live Classifier:** [https://github.com/px7nn/MNIST](https://github.com/px7nn/MNIST)
+**Live Classifier:** [https://px7nn.github.io/MNIST/](https://px7nn.github.io/MNIST/)
 
 ---
 
