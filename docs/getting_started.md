@@ -207,5 +207,6 @@ The [`examples/`](../examples/) directory has five runnable programs:
   ![Interpolation vs Extrapolation](./images/interpolation_vs_extrapolation.png)
 
 - [`mnist.c`](../examples/mnist.c) — loads MNIST handwritten digits, normalizes pixel values, trains a network using `Softmax` activation and `Categorical Cross Entropy` loss, and reports test classification accuracy.
+  * **Interactive Live Demo:** Draw digits directly in your browser and see real-time predictions on the [Live MNIST Canvas Demo](https://px7nn.github.io/MNIST/) (source code at [github.com/px7nn/MNIST](https://github.com/px7nn/MNIST)).
 
   ![MNIST Loss Graph](./images/mnist_loss.png)

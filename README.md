@@ -9,7 +9,7 @@ external dependencies beyond the standard library.
 
 ---
 
-<img align="left" style="width:350px" src="./docs/images/mnist_loss.png" width="350px" hspace="20">
+<img align="left" style="width:350px; height:525px" src="./docs/images/mnist_loss.png" width="350px" height="525px" hspace="20">
 
 <div id="toc">
   <ul style="list-style: none">
@@ -26,7 +26,8 @@ cd examples && gcc mnist.c -O3 -march=native
 
 ```text
 ./a
-[########################################] 100% Epoch    50/   50  Loss 1.317e-02
+[########################################] 
+100% Epoch    50/   50  Loss 1.317e-02
 
 Training completed.
 
@@ -37,6 +38,8 @@ Reason     : Maximum epochs reached
 Score: 9771/10000
 Accuracy: 97.71%
 ```
+
+**Live Classifier:** [https://github.com/px7nn/MNIST](https://github.com/px7nn/MNIST)
 
 ---
 
@@ -71,7 +74,7 @@ See [`examples/`](examples/) for full training examples:
 - [`xor_gate.c`](examples/xor_gate.c) — trains a network on XOR and saves it to `xor.mlp`.
 - [`load_model.c`](examples/load_model.c) — loads `xor.mlp` and runs inference without retraining.
 - [`load_csv.c`](examples/load_csv.c) — loads `circle.csv` via `MLP_LoadCSV`, trains, and predicts.
-- [`mnist.c`](examples/mnist.c) — trains on handwritten digits using `Softmax` and `Categorical Cross Entropy`.
+- [`mnist.c`](examples/mnist.c) — trains on handwritten digits using `Softmax` and `Categorical Cross Entropy` (compatible with the [Live MNIST Canvas Demo](https://px7nn.github.io/MNIST/)).
 - [`visual_sin.c`](examples/visual_sin.c) — fits a sine wave and saves a visualization plot.
 
 
