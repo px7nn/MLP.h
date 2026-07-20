@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.0] - 2026-07-21
+
+### Breaking Changes
+- Renamed `Dataset` struct fields: `Dataset.samples` is now `Dataset.inputs` and `Dataset.output` is now `Dataset.outputs` for consistent and intuitive API naming. `MLP_Create_Dataset()` parameter names updated accordingly.
+
+### Added
+- Added `LOSS_AUTO` (0) as the default loss enum value. It automatically infers the loss function based on the output layer's activation (`ACT_SIGMOID` -> `LOSS_BINARY_CROSS_ENTROPY`, `ACT_SOFTMAX` -> `LOSS_CATEGORICAL_CROSS_ENTROPY`, others -> `LOSS_MSE`).
+- Added automatic fallback defaults in `MLP_Train()`: if `max_epochs`, `learning_rate`, or `stop_loss` are zero-initialized (`0`/`0.0`), they automatically populate with defaults from `MLP_DefaultTrainOptions()`.
+- Added dataset parameter validation in `MLP_Create_Dataset()` for zero `n_samples`, `n_features`, or `n_outputs` (returning `MLP_ERR_INVALID_ARGUMENT`).
+- Added quick reference list of important configuration macros (`MLP_AUTO_INITIALIZERS`, `MLP_USE_LIBM`, `MLP_EXIT_ON_ERROR`, `MLP_CSV_LINE_BUFFER`) to the top header comments in `MLP.h`.
+
+### Fixed
+- Moved `<math.h>` guard macros above stddef/stdlib/stdio headers in `MLP.h`.
+
+### Docs
+- Updated `README.md`, `docs/api.md`, and `docs/theory.md` for `LOSS_AUTO`, non-const `MLP_Train` options auto-fill behavior, and version `0.9.0`.
+
+---
+
 ## [0.8.1] - 2026-07-18
 
 ### Changed

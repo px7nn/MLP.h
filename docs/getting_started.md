@@ -75,7 +75,7 @@ Dataset d = MLP_LoadCSV(
 );
 ```
 
-Unlike `MLP_Create_Dataset`, this allocates its own `samples`/`output`
+Unlike `MLP_Create_Dataset`, this allocates its own `inputs`/`outputs`
 arrays on the heap — free them with `MLP_Destroy_Dataset(&d)` (not
 `free()`) once you're done. See
 [`examples/load_csv.c`](../examples/load_csv.c) for a full example.

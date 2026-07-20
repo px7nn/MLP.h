@@ -5,7 +5,7 @@
 Drop `MLP.h` into your project — no build system, no linking, no
 external dependencies beyond the standard library.
   
-**Version:** 0.8.1 · **License:** [MIT](LICENSE)
+**Version:** 0.9.0 · **License:** [MIT](LICENSE)
 
 ---
 
@@ -48,7 +48,7 @@ Accuracy: 97.71%
 ## Features
 
 - **Zero External Dependencies:** Pure, portable C99/C11. No linking required, with optional `<math.h>` support (`MLP_USE_LIBM`).
-- **Flexible Network Configuration:** Configure arbitrary topologies, activation functions (`ReLU`, `Leaky ReLU`, `Sigmoid`, `Tanh`, `Softmax`, `Linear`), weight initializers (`He`, `Xavier`), and loss functions (`MSE`, `BCE`, `CCE`) via `NetworkConfig`.
+- **Flexible Network Configuration:** Configure arbitrary topologies, activation functions (`ReLU`, `Leaky ReLU`, `Sigmoid`, `Tanh`, `Softmax`, `Linear`), weight initializers (`He`, `Xavier`, or `MLP_AUTO_INITIALIZERS`), and loss functions (`MSE`, `BCE`, `CCE`, or automatic inference via `LOSS_AUTO`) via `NetworkConfig`.
 - **Model Persistence:** Easily save and load trained networks to/from disk using compact binary files.
 - **Built-in CSV Parsing:** Streamline dataset preparation with automated CSV loading (`MLP_LoadCSV`) or wrap existing memory arrays.
 - **Structured Error Handling:** Features a robust global error reporting system with an opt-in fail-fast check (`MLP_EXIT_ON_ERROR`) to keep client code completely clean.

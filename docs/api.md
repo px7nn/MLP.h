@@ -8,9 +8,9 @@ including the header.
 
 ```c
 #define MLP_VERSION_MAJOR 0
-#define MLP_VERSION_MINOR 8
-#define MLP_VERSION_PATCH 1
-#define MLP_VERSION_STRING "0.8.1"
+#define MLP_VERSION_MINOR 9
+#define MLP_VERSION_PATCH 0
+#define MLP_VERSION_STRING "0.9.0"
 
 #define MLP_MAGIC   0x4D4C5033u /* "MLP3" */
 #define MLP_VERSION 3u
@@ -128,6 +128,8 @@ network's final output layer (not hidden layers) and must be paired with
 
 ```c
 typedef enum {
+    LOSS_AUTO,
+
     LOSS_MSE,
     LOSS_BINARY_CROSS_ENTROPY,
     LOSS_CATEGORICAL_CROSS_ENTROPY,
@@ -136,16 +138,11 @@ typedef enum {
 } Loss;
 ```
 
-Set once per network via `NetworkConfig.loss`. `LOSS_MSE` (mean squared
-error) suits regression and works with any output activation.
-`LOSS_BINARY_CROSS_ENTROPY` is intended for a single sigmoid output
-representing a probability; `MLP_Train` combines it with `ACT_SIGMOID`
-using the standard simplified gradient (`pred - target`), so pairing
-`LOSS_BINARY_CROSS_ENTROPY` with a non-sigmoid output layer will train,
-but the gradient won't correspond to that loss's true derivative.
-`LOSS_CATEGORICAL_CROSS_ENTROPY` is intended for multi-class classification
-(with output dimensions > 1) and must be paired with an `ACT_SOFTMAX` output layer.
-`MLP_Train` optimizes it using the unified gradient `(pred - target)`.
+Set once per network via `NetworkConfig.loss`.
+`LOSS_AUTO` is the default enum value (0) and is automatically selected when `.loss` is omitted or zero-initialized in `NetworkConfig`. It infers `LOSS_BINARY_CROSS_ENTROPY` for `ACT_SIGMOID` outputs, `LOSS_CATEGORICAL_CROSS_ENTROPY` for `ACT_SOFTMAX` outputs, and `LOSS_MSE` for all other output activations (`ACT_LINEAR`, `ACT_RELU`, `ACT_LEAKY_RELU`, `ACT_TANH`).
+`LOSS_MSE` (mean squared error) suits regression and works with any output activation.
+`LOSS_BINARY_CROSS_ENTROPY` is intended for a single sigmoid output representing a probability.
+`LOSS_CATEGORICAL_CROSS_ENTROPY` is intended for multi-class classification (with output dimensions > 1) paired with an `ACT_SOFTMAX` output layer.
 `LOSS_COUNT` is a sentinel, not a real loss.
 
 ### `Initializer`
@@ -190,8 +187,8 @@ Get sane defaults with `MLP_DefaultTrainOptions()`.
 
 ```c
 typedef struct {
-    double *samples; // Flattened: samples x features
-    double *output;        // Flattened: samples x n_outputs (may be NULL)
+    double *inputs;  // Flattened: n_samples x n_features
+    double *outputs; // Flattened: n_samples x n_outputs (may be NULL)
 
     size_t n_samples;
     size_t n_features;
@@ -200,13 +197,13 @@ typedef struct {
 ```
 
 A `Dataset` built with `MLP_Create_Dataset` does not own or copy
-`samples`/`output` — it just holds pointers into memory you manage, and
-you're responsible for freeing that memory yourself. `output` may be
+`inputs`/`outputs` — it just holds pointers into memory you manage, and
+you're responsible for freeing that memory yourself. `outputs` may be
 `NULL` for prediction-only datasets. Prefer constructing with
 `MLP_Create_Dataset` rather than initializing the struct directly, since
 it validates its inputs.
 
-The exception is `MLP_LoadCSV()`: it heap-allocates `samples`/`output`
+The exception is `MLP_LoadCSV()`: it heap-allocates `inputs`/`outputs`
 itself, and the resulting `Dataset` **must** be freed with
 `MLP_Destroy_Dataset()` rather than `free()`d or manually managed — don't
 mix the two allocation styles for the same `Dataset`.
@@ -271,8 +268,8 @@ with, used by `MLP_Train`.
 
 ```c
 Dataset MLP_Create_Dataset(
-    double *samples,
-    double *output,
+    double *inputs,
+    double *outputs,
     size_t n_samples,
     size_t n_features,
     size_t n_outputs
@@ -280,7 +277,7 @@ Dataset MLP_Create_Dataset(
 ```
 
 Builds a `Dataset` from existing arrays. Returns a zeroed `Dataset` (all
-fields NULL/0) if `samples` is NULL or `n_samples`/`n_features` is 0.
+fields NULL/0) if `inputs` is NULL or `n_samples`/`n_features`/`n_outputs` is 0.
 
 ### `MLP_DefaultTrainOptions`
 
@@ -339,18 +336,18 @@ Debug helpers that print weights/biases or a tabular data dump to
 ### `MLP_Train`
 
 ```c
-bool MLP_Train(Network *net, const Dataset *d, const TrainOptions *options);
+bool MLP_Train(Network *net, const Dataset *d, TrainOptions *options);
 ```
 
 Trains `net` in place via per-sample SGD backpropagation, minimizing
 whichever `Loss` the network was created with (`net->loss` — see
-`NetworkConfig`). Returns `false` if `net`, `d`, or `options` are
+`NetworkConfig`). Any zeroed fields in `options` (e.g. `max_epochs == 0`, `learning_rate == 0.0`, or `stop_loss == 0.0`) are automatically populated with defaults from `MLP_DefaultTrainOptions()`. Returns `false` if `net`, `d`, or `options` are
 invalid, if `d->output` is NULL, or if the dataset's feature/output
 counts don't match the network's input/output widths. Returns `true` on
 completion (including early stop via `stop_loss`). Both `stop_loss` and the
 printed loss are computed using the network's configured `Loss` function (i.e.,
-mean squared error for `LOSS_MSE`, and binary cross-entropy for
-`LOSS_BINARY_CROSS_ENTROPY`), normalized by the total number of prediction
+mean squared error for `LOSS_MSE`, binary cross-entropy for
+`LOSS_BINARY_CROSS_ENTROPY`, or categorical cross-entropy for `LOSS_CATEGORICAL_CROSS_ENTROPY`), normalized by the total number of prediction
 outputs (`d->n_samples * d->n_outputs`).
 
 ### `MLP_Predict`

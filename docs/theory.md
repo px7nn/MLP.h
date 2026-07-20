@@ -64,6 +64,8 @@ including a slot for the raw input (`activations[0]`), so
 
 Set once per network via `NetworkConfig.loss`:
 
+- **`LOSS_AUTO`** — default (0). Automatically infers `LOSS_BINARY_CROSS_ENTROPY` for `ACT_SIGMOID`, `LOSS_CATEGORICAL_CROSS_ENTROPY` for `ACT_SOFTMAX`, and `LOSS_MSE` for all other output activations.
+
 - **`LOSS_MSE`** — mean squared error, suits regression and works with
   any output activation:
 
