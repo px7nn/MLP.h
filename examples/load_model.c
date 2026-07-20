@@ -63,11 +63,11 @@ int main(void)
     double predictions[N_SAMPLES * N_OUTPUTS];
 
     /* Store predictions in the buffer above. */
-    d.output = predictions;
+    d.outputs = predictions;
 
     
     /* Run inference on every input sample. */
-    if (!MLP_Predict_Dataset(&net, &d, d.output)) {
+    if (!MLP_Predict_Dataset(&net, &d, d.outputs)) {
         printf("Prediction failed: %s\n",
                MLP_ErrorString(MLP_GetLastError()));
         MLP_Destroy_Network(&net);

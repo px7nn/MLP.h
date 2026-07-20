@@ -34,29 +34,29 @@
 #define TS_PATH "../datasets/mnist_test.csv"
 
 void preprocess_dataset(Dataset *d){
-    /*  swaps the d.samples[j * d.n_features + 0] <-> d.output[i] 
+    /*  swaps the d.inputs[j * d.n_features + 0] <-> d.outputs[i] 
         and normalize each pixels */
     double *new_array = calloc(d->n_samples * 10, sizeof *new_array);
     for(size_t i=0; i<d->n_samples; ++i){
         // first col of sample is the label
-        int label = (int)d->samples[i * d->n_features];
+        int label = (int)d->inputs[i * d->n_features];
 
         // shift all elements to the left (prev col)
         memmove(
-            &d->samples[i * d->n_features], 
-            &d->samples[i * d->n_features + 1], 
-            (d->n_features-1) * sizeof *d->samples
+            &d->inputs[i * d->n_features], 
+            &d->inputs[i * d->n_features + 1], 
+            (d->n_features-1) * sizeof *d->inputs
         );
 
-        d->samples[i * d->n_features + (d->n_features-1)] = d->output[i]/255.0;
+        d->inputs[i * d->n_features + (d->n_features-1)] = d->outputs[i]/255.0;
         new_array[i * 10 + label] = 1.0;
 
         for(size_t j=0; j<d->n_features-1; j++)
-            d->samples[i * d->n_features + j] = d->samples[i * d->n_features + j]/255.0;
+            d->inputs[i * d->n_features + j] = d->inputs[i * d->n_features + j]/255.0;
     }
-    free(d->output);
+    free(d->outputs);
 
-    d->output    = new_array;
+    d->outputs   = new_array;
     d->n_outputs = 10;
 }
 
@@ -64,7 +64,7 @@ int main(){
     Dataset trd = MLP_LoadCSV(TR_PATH, 60000, 28*28, 1, true);
     Dataset tsd = MLP_LoadCSV(TS_PATH, 10000, 28*28, 1, true);
 
-    if(!trd.samples || !tsd.output){
+    if(!trd.inputs || !tsd.outputs){
         MLP_Perror("LoadCSV");
         goto destroy;
     }
@@ -106,7 +106,7 @@ int main(){
         for(size_t j=1; j<10; ++j){
             if(pred[i * 10 + predicted] < pred[i * 10 + j])
                 predicted = j;
-            if(tsd.output[i * 10 + target] < tsd.output[i * 10 + j])
+            if(tsd.outputs[i * 10 + target] < tsd.outputs[i * 10 + j])
                 target = j;
         }
 

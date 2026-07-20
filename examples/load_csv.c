@@ -33,12 +33,12 @@ int main(){
     });
 
     Dataset test = d;
-    test.output = malloc(d.n_samples * N_OUTPUTS * sizeof *test.output);
+    test.outputs = malloc(d.n_samples * N_OUTPUTS * sizeof *test.outputs);
 
-    MLP_Predict_Dataset(&n, &test, test.output);
+    MLP_Predict_Dataset(&n, &test, test.outputs);
 
     MLP_View_Dataset(&test);
 
-    free(test.output);  // Be careful cause this might never execute cause exit_on_failure
+    free(test.outputs);  // Be careful cause this might never execute cause exit_on_failure
     MLP_Destroy_Dataset(&d);
 }

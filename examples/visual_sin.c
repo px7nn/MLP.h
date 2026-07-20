@@ -57,9 +57,9 @@ int main(){
         .verbose        = true 
     });
 
-    MLP_Predict_Dataset(&n, &TS_D, TS_D.output);
+    MLP_Predict_Dataset(&n, &TS_D, TS_D.outputs);
 
-    GNUPLOT(TS_D.samples, TS_D.output);
+    GNUPLOT(TS_D.inputs, TS_D.outputs);
 
     MLP_Destroy_Dataset(&TR_D);
     MLP_Destroy_Network(&n);
@@ -70,13 +70,13 @@ int main(){
 Dataset init_data(double range, bool save_output){
     const size_t n_samples = SAMPLES(range);
     Dataset d = {
-        .samples    = calloc(n_samples, sizeof *d.samples),
-        .output     = calloc(n_samples, sizeof *d.output),
+        .inputs     = calloc(n_samples, sizeof *d.inputs),
+        .outputs    = calloc(n_samples, sizeof *d.outputs),
         .n_samples  = n_samples,
         .n_features = 1,
         .n_outputs  = 1
     };
-    if(!d.samples || !d.output){
+    if(!d.inputs || !d.outputs){
         perror("malloc");
         return (Dataset){0};
     }
@@ -84,9 +84,9 @@ Dataset init_data(double range, bool save_output){
     const double step = range/(n_samples - 1);
     for(size_t i=0; i<n_samples; ++i){
         double x = i * step;
-        d.samples[i] =  x;
+        d.inputs[i] =  x;
         if(save_output)
-            d.output[i] = FN(x);
+            d.outputs[i] = FN(x);
     }
     return d;
 }

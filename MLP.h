@@ -7,16 +7,37 @@
     Usage: define MLP_IMPLEMENTATION in exactly one translation unit before
     including this header to pull in the implementation.
 
+    GitHub:  https://github.com/px7nn/MLP.h
     License: MIT (see LICENSE)
+
+    
+    !!! Important Macros:-
+
+        MLP_AUTO_INITIALIZERS
+            Automatically selects theoretically suitable weight initializers
+            based on the activation function of each layer
+
+        MLP_USE_LIBM
+            Forces MLP to use standard math library functions (sqrt, exp, log)
+            for better performance and numerical accuracy
+            Alternatively including <math.h> before MLP.h enables this automatically
+
+        MLP_EXIT_ON_ERROR
+            Terminates the program immediately when an error occurs and prints
+            the corresponding error description
+
+        MLP_CSV_LINE_BUFFER <size>
+            Sets the maximum length of a CSV line that MLP_LoadCSV() can read.
+            Default: 1024 bytes
 =============================================================================*/
 
 #ifndef MLP_H
 #define MLP_H
 
 #define MLP_VERSION_MAJOR 0
-#define MLP_VERSION_MINOR 8
-#define MLP_VERSION_PATCH 1
-#define MLP_VERSION_STRING "0.8.1"
+#define MLP_VERSION_MINOR 9
+#define MLP_VERSION_PATCH 0
+#define MLP_VERSION_STRING "0.9.0"
 
 #define MLP_MAGIC   0x4D4C5033u /* "MLP3" */
 #define MLP_VERSION 3u
@@ -29,7 +50,23 @@
 #define LEN(ARR) sizeof(ARR) / sizeof(ARR[0])
 
 // Automatically assign the best initializer for each layer based on its activation.
-#define MLP_AUTO_INITIALIZERS NULL
+#define MLP_AUTO_INITIALIZERS (const Initializer *)0
+
+
+// check if mlp has libm, fallback to custom math functions
+#if defined(MLP_USE_LIBM) || defined(_MATH_H) || defined(_MATH_H_) || defined(_INC_MATH)
+    #include <math.h>
+
+    #define _SQRT sqrt 
+    #define _EXP  exp
+    #define _LOG  log
+#else
+    #define _mlp_use_custom_math
+
+    #define _SQRT _sqrt 
+    #define _EXP  _exponential
+    #define _LOG  _log
+#endif
 
 
 #include <stddef.h>
@@ -86,6 +123,8 @@ typedef enum {
 } Activation;
 
 typedef enum {
+    LOSS_AUTO,
+
     LOSS_MSE,
     LOSS_BINARY_CROSS_ENTROPY,
     LOSS_CATEGORICAL_CROSS_ENTROPY,
@@ -118,8 +157,8 @@ typedef struct {
 
 
 typedef struct {
-    double *samples; // Flattened: samples x features
-    double *output;  // Flattened: samples x n_outputs (may be NULL for prediction-only datasets)
+    double *inputs;   // Flattened: inputs x features
+    double *outputs;  // Flattened: inputs x n_outputs (may be NULL for prediction-only datasets)
 
     size_t n_samples; 
     size_t n_features;
@@ -130,7 +169,7 @@ typedef struct {
     double *weights; // Flattened: neurons * inputs
     double *biases;  // neurons
 
-    size_t neurons;  // number of neurons in this layer (its output width)
+    size_t neurons;  // number of neurons in this layer (its outputs width)
     size_t inputs;   // number of inputs into this layer (previous layer's neuron count)
 
     Activation activation;
@@ -162,8 +201,8 @@ typedef struct {
 =============================================================================*/
 
 static Dataset MLP_Create_Dataset(
-    double *samples, 
-    double *output, 
+    double *inputs, 
+    double *outputs, 
     size_t n_samples, 
     size_t n_features,
     size_t n_outputs
@@ -174,8 +213,8 @@ static TrainOptions MLP_DefaultTrainOptions(void);
 static Network MLP_Create_Network(const NetworkConfig *cfg);
 static void    MLP_View_Network(const Network *net);
 static void    MLP_View_Dataset(const Dataset *d);
-static bool    MLP_Train(Network *net, const Dataset *d, const TrainOptions *options);
-static bool    MLP_Predict(const Network *net, double *input, double *output);
+static bool    MLP_Train(Network *net, const Dataset *d, TrainOptions *options);
+static bool    MLP_Predict(const Network *net, double *input, double *outputs);
 static bool    MLP_Predict_Dataset(const Network *net, const Dataset *d, double *buf);
 static void    MLP_Destroy_Network(Network *net);
 
@@ -204,20 +243,6 @@ static inline void _mlp_set_error(MLP_Error err);
 static void _print_summary(size_t epoch, size_t max_epochs, double loss, const char *reason);
 static bool _verify_net_d(const Network *net, const Dataset *d, const bool check_output);
 
-// check if mlp has libm, fallback to custom math functions
-#if defined(MLP_USE_LIBM) || defined(_MATH_H) || defined(_MATH_H_) || defined(_INC_MATH)
-    #include <math.h>
-
-    #define _SQRT sqrt 
-    #define _EXP  exp
-    #define _LOG  log
-#else
-    #define _mlp_use_custom_math
-
-    #define _SQRT _sqrt 
-    #define _EXP  _exponential
-    #define _LOG  _log
-#endif
 
 #ifdef _mlp_use_custom_math
     static inline double _sqrt(double x);
@@ -229,13 +254,14 @@ static inline double _pow(double base, unsigned int exp);
 
 static inline double _initialize_weight(const size_t inputs, const Initializer initializer);
 static inline Initializer _get_best_initializer(Activation act);
+static inline Loss _get_best_loss(Activation act);
 
 /* Activation funcs */
 static inline double _ReLU(double z);
 static inline double _Leaky_ReLU(double z);
 static inline double _Sigmoid(double z);
 static inline double _Tanh(double z);
-static        void   _Softmax(const double *z, double *output, size_t N);
+static        void   _Softmax(const double *z, double *outputs, size_t N);
 static inline double _activation(double z, Activation act);
 
 
@@ -355,10 +381,10 @@ static bool _verify_net_d(const Network *net, const Dataset *d, const bool check
     if (!net 
         || !net->layers 
         || !d   
-        || !d->samples 
-        || check_output && !d->output
+        || !d->inputs 
+        || check_output && !d->outputs
     ) {
-        // No check for d->output cause MLP_Predict() supports .output to be null
+        // No check for d->outputs cause MLP_Predict() supports .outputs to be null
         _mlp_set_error(MLP_ERR_NULL_POINTER);
         _exit_on_failure();
         return false;
@@ -446,9 +472,9 @@ static inline double _initialize_weight(const size_t input_count, const Initiali
     switch(initializer){
         case INIT_XAVIER: return _SQRT(1 / (double)input_count) * w;
         case INIT_HE:     return _SQRT(2 / (double)input_count) * w;
-        default:          return 0.0;
+        default:          return INIT_XAVIER;
     }
-    return 0.0;
+    return INIT_XAVIER;
 }
 static inline Initializer _get_best_initializer(Activation act){
     switch(act){
@@ -459,10 +485,25 @@ static inline Initializer _get_best_initializer(Activation act){
         case ACT_TANH:
         case ACT_LINEAR:     return INIT_XAVIER;
         
-        default:             return 0.0;        
+        default:             return INIT_XAVIER;        
     }
-    return 0.0;
+    return INIT_XAVIER;
 }
+static inline Loss _get_best_loss(Activation act){
+    switch(act){
+        case ACT_LINEAR:
+        case ACT_RELU:
+        case ACT_LEAKY_RELU:
+        case ACT_TANH:
+            return LOSS_MSE;
+
+        case ACT_SIGMOID:   return LOSS_BINARY_CROSS_ENTROPY;
+        case ACT_SOFTMAX:   return LOSS_CATEGORICAL_CROSS_ENTROPY;
+        default:            return LOSS_MSE;
+    }
+    return LOSS_MSE;
+}
+
 
 static inline double _ReLU(double z){
     return (z > 0.0)? z : 0;
@@ -495,7 +536,7 @@ static inline double _Tanh_derivative(double activation){
     return 1.0 - activation * activation;
 }
 
-static void _Softmax(const double *z, double *output, size_t N){
+static void _Softmax(const double *z, double *outputs, size_t N){
     double max = z[0];
     for(size_t i=0; i<N; ++i)
         if(max < z[i])
@@ -503,12 +544,12 @@ static void _Softmax(const double *z, double *output, size_t N){
     
     double sum = 0;
     for(size_t i=0; i<N; ++i){
-        output[i] = _EXP(z[i] - max);
-        sum += output[i];
+        outputs[i] = _EXP(z[i] - max);
+        sum += outputs[i];
     }
 
     for(size_t i=0; i<N; ++i)
-        output[i] /= sum;
+        outputs[i] /= sum;
 }
 
 static inline double _activation(double z, Activation act){
@@ -518,6 +559,7 @@ static inline double _activation(double z, Activation act){
         case ACT_LEAKY_RELU:    return _Leaky_ReLU(z);
         case ACT_SIGMOID:       return _Sigmoid(z);
         case ACT_TANH:          return _Tanh(z);
+        case ACT_SOFTMAX:       return 0.0;  // Not supported hidden layer
         default:                return z;
     }
     return z;
@@ -530,6 +572,7 @@ static inline double _activation_derivative(double activation, Activation act){
         case ACT_LEAKY_RELU:    return _Leaky_ReLU_derivative(activation);
         case ACT_SIGMOID:       return _Sigmoid_derivative(activation);
         case ACT_TANH:          return _Tanh_derivative(activation);
+        case ACT_SOFTMAX:       return 0.0;  // Not supported hidden layer
         default:                return 1.0;
     }
     return 1.0;
@@ -543,7 +586,7 @@ static _Workspace _Workspace_Create(const Network *net){
         return ws;
 
     // +1 because activations/deltas include slot 0 for the raw input,
-    // so activations[i+1]/deltas[i+1] line up with net->layers[i]'s output.
+    // so activations[i+1]/deltas[i+1] line up with net->layers[i]'s outputs.
     ws.layers = net->n_layers + 1;
 
     ws.z           = calloc(ws.layers, sizeof *ws.z);
@@ -634,7 +677,7 @@ static void _forward(
         const Layer *layer = &net->layers[i];
 
         double *input  = ws->activations[i];
-        double *output = ws->activations[i+1];
+        double *outputs = ws->activations[i+1];
 
         for(size_t j=0; j < layer->neurons; ++j){
             double sum = layer->biases[j];
@@ -646,10 +689,10 @@ static void _forward(
             ws->z[i+1][j] = sum;
         }
         if(layer->activation == ACT_SOFTMAX)
-            _Softmax(ws->z[i+1], output, layer->neurons);
+            _Softmax(ws->z[i+1], outputs, layer->neurons);
         else
             for(size_t j=0; j < layer->neurons; ++j)
-                output[j] = _activation(ws->z[i+1][j], layer->activation);
+                outputs[j] = _activation(ws->z[i+1][j], layer->activation);
     }
 }
 
@@ -661,20 +704,20 @@ static void _backprop(
     const size_t last = ws->layers - 1;
 
     /* OUTPUT */
-    const Layer *output = &net->layers[net->n_layers - 1];
-    for(size_t i=0; i<output->neurons; ++i){
+    const Layer *outputs = &net->layers[net->n_layers - 1];
+    for(size_t i=0; i<outputs->neurons; ++i){
         const double pred = ws->activations[last][i];
         
         switch(net->loss){
             case LOSS_MSE: 
-                ws->deltas[last][i] = (pred - target[i]) * _activation_derivative(pred, output->activation);
+                ws->deltas[last][i] = (pred - target[i]) * _activation_derivative(pred, outputs->activation);
                 break;
             case LOSS_BINARY_CROSS_ENTROPY:
             case LOSS_CATEGORICAL_CROSS_ENTROPY:
                 ws->deltas[last][i] = (pred - target[i]);
                 break;
             default:
-                ws->deltas[last][i] = (pred - target[i]) * _activation_derivative(pred, output->activation);
+                ws->deltas[last][i] = (pred - target[i]) * _activation_derivative(pred, outputs->activation);
                 break;
         }
     }
@@ -695,7 +738,7 @@ static void _backprop(
 
             // Error is propagated backwards through next_layer's weights,
             // accessed "transposed" (column j instead of row k) since we're
-            // going output->input instead of input->output.
+            // going outputs->input instead of input->outputs.
             for(size_t k = 0; k < next_layer->neurons; ++k)
                 sum += ws->deltas[i+1][k] * next_layer->weights[k * next_layer->inputs + j];
 
@@ -752,21 +795,26 @@ static TrainOptions MLP_DefaultTrainOptions(void){
 }
 
 static Dataset MLP_Create_Dataset(
-    double *samples, 
-    double *output, 
+    double *inputs, 
+    double *outputs, 
     size_t n_samples, 
     size_t n_features,
     size_t n_outputs
 ){
-    if(!samples || n_samples == 0 || n_features == 0){
+    if(!inputs){
         _mlp_set_error(MLP_ERR_NULL_POINTER);
+        _exit_on_failure();
+        return (Dataset){0};
+    }
+    if(n_samples == 0 || n_features == 0 || n_outputs == 0){
+        _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
         _exit_on_failure();
         return (Dataset){0};
     }
 
     return (Dataset){
-        samples, 
-        output, 
+        inputs, 
+        outputs, 
         n_samples, 
         n_features,
         n_outputs
@@ -826,8 +874,13 @@ static Network MLP_Create_Network(const NetworkConfig *cfg){
         return net;
     }
 
+    Loss loss = cfg->loss;
+    if(cfg->loss == LOSS_AUTO){
+        loss = _get_best_loss(cfg->activations[n_layers-1]);
+    }
+
     net.n_layers = n_layers;
-    net.loss     = cfg->loss;
+    net.loss     = loss;
 
     net.layers = calloc(net.n_layers, sizeof *net.layers);
     if(!net.layers){
@@ -900,7 +953,7 @@ static void MLP_View_Network(const Network *net){
 }
 
 static void MLP_View_Dataset(const Dataset *d){
-    if(!d || !d->samples)
+    if(!d || !d->inputs)
         return;
 
     printf("\nDataset Summary\n");
@@ -913,7 +966,7 @@ static void MLP_View_Dataset(const Dataset *d){
     for(size_t i = 0; i < d->n_features; ++i)
         printf("X%-7zu", i);
 
-    if(d->output)
+    if(d->outputs)
         for(size_t i = 0; i < d->n_outputs; ++i)
             printf("Y%-7zu", i);
 
@@ -924,12 +977,12 @@ static void MLP_View_Dataset(const Dataset *d){
 
         for(size_t feat = 0; feat < d->n_features; ++feat)
             printf("%-8.3f",
-                d->samples[sample * d->n_features + feat]);
+                d->inputs[sample * d->n_features + feat]);
 
-        if(d->output){
+        if(d->outputs){
             for(size_t out = 0; out < d->n_outputs; ++out)
                 printf("%-8.3f",
-                    d->output[sample * d->n_outputs + out]);
+                    d->outputs[sample * d->n_outputs + out]);
         }
 
         printf("\n");
@@ -941,7 +994,7 @@ static void MLP_View_Dataset(const Dataset *d){
 static bool MLP_Train(
     Network *net, 
     const Dataset *d,
-    const TrainOptions *options
+    TrainOptions *options
 ){
     if(!_verify_net_d(net, d, true))
         return false;
@@ -950,6 +1003,14 @@ static bool MLP_Train(
         _exit_on_failure();
         return false;
     }
+
+    if(options->max_epochs == 0)
+        options->max_epochs = MLP_DefaultTrainOptions().max_epochs;
+    if(options->learning_rate == 0.0)
+        options->learning_rate = MLP_DefaultTrainOptions().learning_rate;
+    if(options->stop_loss == 0.0)
+        options->stop_loss = MLP_DefaultTrainOptions().stop_loss;
+    // verbose and loss file is by default none
 
     _Workspace ws = _Workspace_Create(net);
 
@@ -974,11 +1035,11 @@ static bool MLP_Train(
         loss = 0.0; epch = epoch;
 
         for(size_t sample = 0; sample < d->n_samples; ++sample){
-            const double *sample_ptr = d->samples + sample * d->n_features;
+            const double *sample_ptr = d->inputs + sample * d->n_features;
 
             _forward(&ws, net, sample_ptr);
 
-            const double *target = d->output + sample * d->n_outputs;
+            const double *target = d->outputs + sample * d->n_outputs;
             double *pred = ws.activations[ws.layers - 1];
             
             for(size_t i=0; i<d->n_outputs; ++i)
@@ -1029,20 +1090,20 @@ static bool MLP_Train(
     return true;
 }
 
-static bool MLP_Predict(const Network *net, double *input, double *output){
-    if (!net || !net->layers || !input || !output) {
+static bool MLP_Predict(const Network *net, double *input, double *outputs){
+    if (!net || !net->layers || !input || !outputs) {
         _mlp_set_error(MLP_ERR_NULL_POINTER);
         _exit_on_failure();
         return false;
     }
 
     return MLP_Predict_Dataset(net, &(Dataset){
-        .samples    = input,
-        .output     = NULL,
+        .inputs    = input,
+        .outputs     = NULL,
         .n_samples  = 1,
         .n_features = net->layers[0].inputs,
         .n_outputs  = net->layers[net->n_layers - 1].neurons
-    }, output);
+    }, outputs);
 }
 
 static bool MLP_Predict_Dataset(const Network *net, const Dataset *d, double *buf){
@@ -1060,7 +1121,7 @@ static bool MLP_Predict_Dataset(const Network *net, const Dataset *d, double *bu
         return false;
 
     for(size_t sample = 0; sample < d->n_samples; ++sample){
-        const double *sample_ptr = d->samples + d->n_features * sample;
+        const double *sample_ptr = d->inputs + d->n_features * sample;
         _forward(&ws, net, sample_ptr);
 
         double *pred = ws.activations[ws.layers - 1];
@@ -1275,8 +1336,8 @@ static Dataset MLP_LoadCSV(
     }
     if (n_features == 0 
         || max_samples == 0
-        || max_samples > SIZE_MAX / n_features / sizeof *d.samples
-        || n_outputs && max_samples > SIZE_MAX / n_outputs / sizeof *d.output){
+        || max_samples > SIZE_MAX / n_features / sizeof *d.inputs
+        || n_outputs && max_samples > SIZE_MAX / n_outputs / sizeof *d.outputs){
         _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
         _exit_on_failure();
         return d;
@@ -1289,15 +1350,15 @@ static Dataset MLP_LoadCSV(
         return d;
     }
 
-    d.samples = malloc(max_samples * n_features * sizeof *d.samples);
-    if(!d.samples){
+    d.inputs = malloc(max_samples * n_features * sizeof *d.inputs);
+    if(!d.inputs){
         _mlp_set_error(MLP_ERR_ALLOC_FAILED);
         goto fail;
     }
 
     if(n_outputs){
-        d.output = malloc(max_samples * n_outputs * sizeof *d.output);
-        if(!d.output){
+        d.outputs = malloc(max_samples * n_outputs * sizeof *d.outputs);
+        if(!d.outputs){
             _mlp_set_error(MLP_ERR_ALLOC_FAILED);
             goto fail;
         }
@@ -1344,9 +1405,9 @@ static Dataset MLP_LoadCSV(
             }
 
             if(col < n_features)
-                d.samples[sample * n_features + col] = val;
+                d.inputs[sample * n_features + col] = val;
             else
-                d.output[sample * n_outputs + (col - n_features)] = val;
+                d.outputs[sample * n_outputs + (col - n_features)] = val;
 
             ++col;
             token = strtok(NULL, ",\n\r");
@@ -1371,15 +1432,15 @@ static Dataset MLP_LoadCSV(
     }
 
     if(sample < max_samples){
-        double *tmp = realloc(d.samples, sample * n_features * sizeof *d.samples);
+        double *tmp = realloc(d.inputs, sample * n_features * sizeof *d.inputs);
         if(tmp)
-            d.samples = tmp;
+            d.inputs = tmp;
     }
 
     if(n_outputs && sample < max_samples){
-        double *tmp = realloc(d.output, sample * n_outputs * sizeof *d.output);
+        double *tmp = realloc(d.outputs, sample * n_outputs * sizeof *d.outputs);
         if(tmp)
-            d.output = tmp;
+            d.outputs = tmp;
     }
 
     d.n_samples = sample;
@@ -1390,8 +1451,8 @@ static Dataset MLP_LoadCSV(
     return d;
 
     fail:
-        free(d.samples);
-        free(d.output);
+        free(d.inputs);
+        free(d.outputs);
 
         if(fp)
             fclose(fp);
@@ -1403,8 +1464,8 @@ static void MLP_Destroy_Dataset(Dataset *d){
     if (!d)
         return;
 
-    free(d->samples);
-    free(d->output);
+    free(d->inputs);
+    free(d->outputs);
     *d = (Dataset){0};
 }
 
