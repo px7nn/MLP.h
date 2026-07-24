@@ -9,8 +9,8 @@ including the header.
 ```c
 #define MLP_VERSION_MAJOR 0
 #define MLP_VERSION_MINOR 9
-#define MLP_VERSION_PATCH 0
-#define MLP_VERSION_STRING "0.9.0"
+#define MLP_VERSION_PATCH 1
+#define MLP_VERSION_STRING "0.9.1"
 
 #define MLP_MAGIC   0x4D4C5033u /* "MLP3" */
 #define MLP_VERSION 3u
@@ -37,6 +37,7 @@ includes the header.
 #define MLP_EXIT_ON_ERROR   // opt-in: abort on any public API failure
 #define MLP_CSV_LINE_BUFFER 1024  // size of the internal CSV line buffer
 #define MLP_USE_LIBM        // opt-in: use math.h functions instead of custom ones
+#define MLPDEF              // customize API function linkage (defaults to extern)
 ```
 
 - **`MLP_EXIT_ON_ERROR`** — if defined, every public API function that
@@ -55,6 +56,11 @@ includes the header.
   activations, and loss calculations, rather than using the custom internal
   approximations. Requires linking against the standard math library (e.g. `-lm` on Unix).
   *Note: The library will also automatically detect and use `<math.h>` if the header has already been included in the translation unit before `MLP.h`.*
+- **`MLPDEF`** — linkage macro used for all public API function declarations and
+  definitions. Defaults to empty (external linkage, i.e., `extern`). Can be redefined
+  (e.g., to `static inline` or custom visibility qualifiers) before including `MLP.h` to
+  change function link scope, build a shared library, or configure the header for dead-code
+  elimination when compiled header-only.
 
 ## Types
 

@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.1] - 2026-07-24
+
+### Added
+- Configurable `MLPDEF` linkage macro for customizing function linkage and visibility (defaults to `extern`, can be overridden to `static inline` for header-only builds).
+
+### Docs
+- Updated `README.md` and `docs/api.md` to document the `MLPDEF` macro and version `0.9.1`.
+
+---
+
 ## [0.9.0] - 2026-07-21
 
 ### Breaking Changes

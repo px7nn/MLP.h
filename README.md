@@ -5,7 +5,7 @@
 Drop `MLP.h` into your project — no build system, no linking, no
 external dependencies beyond the standard library.
   
-**Version:** 0.9.0 · **License:** [MIT](LICENSE)
+**Version:** 0.9.1 · **License:** [MIT](LICENSE)
 
 ---
 
