@@ -26,9 +26,16 @@
             Terminates the program immediately when an error occurs and prints
             the corresponding error description
 
-        MLP_CSV_LINE_BUFFER <size>
+    !!! Redefinable Macros
+
+        MLP_CSV_LINE_BUFFER
             Sets the maximum length of a CSV line that MLP_LoadCSV() can read.
             Default: 1024 bytes
+
+        MLPDEF
+            Defaults to external linkage.
+            Override MLPDEF (e.g. `static inline`) when using MLP.h as a
+            header-only library and want the compiler to remove unused functions.
 =============================================================================*/
 
 #ifndef MLP_H
@@ -36,18 +43,23 @@
 
 #define MLP_VERSION_MAJOR 0
 #define MLP_VERSION_MINOR 9
-#define MLP_VERSION_PATCH 0
-#define MLP_VERSION_STRING "0.9.0"
+#define MLP_VERSION_PATCH 1
+#define MLP_VERSION_STRING "0.9.1"
 
 #define MLP_MAGIC   0x4D4C5033u /* "MLP3" */
 #define MLP_VERSION 3u
 
 
+#ifndef MLPDEF
+#define MLPDEF
+#endif // MLPDEF
+
+
 #ifndef MLP_CSV_LINE_BUFFER
 #define MLP_CSV_LINE_BUFFER 1024    // Size of the temporary buffer used to read one CSV line
-#endif
+#endif // MLP_CSV_LINE_BUFFER
 
-#define LEN(ARR) sizeof(ARR) / sizeof(ARR[0])
+#define LEN(ARR) (sizeof(ARR) / sizeof(ARR[0]))
 
 // Automatically assign the best initializer for each layer based on its activation.
 #define MLP_AUTO_INITIALIZERS (const Initializer *)0
@@ -200,7 +212,7 @@ typedef struct {
     Public API
 =============================================================================*/
 
-static Dataset MLP_Create_Dataset(
+MLPDEF Dataset MLP_Create_Dataset(
     double *inputs, 
     double *outputs, 
     size_t n_samples, 
@@ -208,32 +220,32 @@ static Dataset MLP_Create_Dataset(
     size_t n_outputs
 );
 
-static TrainOptions MLP_DefaultTrainOptions(void);
+MLPDEF TrainOptions MLP_DefaultTrainOptions(void);
 
-static Network MLP_Create_Network(const NetworkConfig *cfg);
-static void    MLP_View_Network(const Network *net);
-static void    MLP_View_Dataset(const Dataset *d);
-static bool    MLP_Train(Network *net, const Dataset *d, TrainOptions *options);
-static bool    MLP_Predict(const Network *net, double *input, double *outputs);
-static bool    MLP_Predict_Dataset(const Network *net, const Dataset *d, double *buf);
-static void    MLP_Destroy_Network(Network *net);
+MLPDEF Network MLP_Create_Network(const NetworkConfig *cfg);
+MLPDEF void    MLP_View_Network(const Network *net);
+MLPDEF void    MLP_View_Dataset(const Dataset *d);
+MLPDEF bool    MLP_Train(Network *net, const Dataset *d, TrainOptions *options);
+MLPDEF bool    MLP_Predict(const Network *net, double *input, double *outputs);
+MLPDEF bool    MLP_Predict_Dataset(const Network *net, const Dataset *d, double *buf);
+MLPDEF void    MLP_Destroy_Network(Network *net);
 
-static bool MLP_Save_Network(const Network *net, const char *filename);
-static bool MLP_Load_Network(Network *net, const char *filename);
+MLPDEF bool MLP_Save_Network(const Network *net, const char *filename);
+MLPDEF bool MLP_Load_Network(Network *net, const char *filename);
 
 
-static void MLP_Perror(const char *str);
-static const char *MLP_ErrorString(MLP_Error err);
-static MLP_Error   MLP_GetLastError(void);
+MLPDEF void MLP_Perror(const char *str);
+MLPDEF const char *MLP_ErrorString(MLP_Error err);
+MLPDEF MLP_Error   MLP_GetLastError(void);
 
-static Dataset MLP_LoadCSV(
+MLPDEF Dataset MLP_LoadCSV(
     const char *filename,
     size_t max_samples,
     size_t n_features,
     size_t n_outputs,
     bool has_header
 );
-static void MLP_Destroy_Dataset(Dataset *d);
+MLPDEF void MLP_Destroy_Dataset(Dataset *d);
 
 /*=============================================================================
     Private API
@@ -248,7 +260,7 @@ static bool _verify_net_d(const Network *net, const Dataset *d, const bool check
     static inline double _sqrt(double x);
     static inline double _exponential(double x); 
     static inline double _log(double x); 
-#endif
+#endif // _mlp_use_custom_math
 
 static inline double _pow(double base, unsigned int exp);
 
@@ -315,18 +327,18 @@ static void _exit_on_failure(){
     #endif
 }
 
-static void MLP_Perror(const char *str){
+MLPDEF void MLP_Perror(const char *str){
     printf("%s: %s\n",
         str,
         MLP_ErrorString(MLP_GetLastError())
     );
 }
 
-static MLP_Error MLP_GetLastError(void){
+MLPDEF MLP_Error MLP_GetLastError(void){
     return _mlp_last_error;
 }
 
-static const char *MLP_ErrorString(MLP_Error err){
+MLPDEF const char *MLP_ErrorString(MLP_Error err){
     switch(err){
         case MLP_OK:                      return "No error";
         case MLP_ERR_NULL_POINTER:        return "A required argument was NULL";
@@ -382,7 +394,7 @@ static bool _verify_net_d(const Network *net, const Dataset *d, const bool check
         || !net->layers 
         || !d   
         || !d->inputs 
-        || check_output && !d->outputs
+        || (check_output && !d->outputs)
     ) {
         // No check for d->outputs cause MLP_Predict() supports .outputs to be null
         _mlp_set_error(MLP_ERR_NULL_POINTER);
@@ -784,7 +796,7 @@ static inline double _loss(
 }
 
 
-static TrainOptions MLP_DefaultTrainOptions(void){
+MLPDEF TrainOptions MLP_DefaultTrainOptions(void){
     return (TrainOptions){
         .max_epochs = 1000,
         .learning_rate = 1e-3,
@@ -794,7 +806,7 @@ static TrainOptions MLP_DefaultTrainOptions(void){
     };
 }
 
-static Dataset MLP_Create_Dataset(
+MLPDEF Dataset MLP_Create_Dataset(
     double *inputs, 
     double *outputs, 
     size_t n_samples, 
@@ -821,7 +833,7 @@ static Dataset MLP_Create_Dataset(
     };
 }
 
-static Network MLP_Create_Network(const NetworkConfig *cfg){
+MLPDEF Network MLP_Create_Network(const NetworkConfig *cfg){
     Network net = {0};
 
     if(!cfg || !cfg->topology || !cfg->activations){
@@ -848,7 +860,7 @@ static Network MLP_Create_Network(const NetworkConfig *cfg){
 
     for(size_t i = 0; i < n_layers-1; ++i){
         if (cfg->activations[i] >= ACT_COUNT
-            || cfg->initializers && cfg->initializers[i] >= INIT_COUNT
+            || (cfg->initializers && cfg->initializers[i] >= INIT_COUNT)
         ){
             _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
             _exit_on_failure();
@@ -867,8 +879,8 @@ static Network MLP_Create_Network(const NetworkConfig *cfg){
         return net;
     }
 
-    if(cfg->loss == LOSS_CATEGORICAL_CROSS_ENTROPY && cfg->activations[n_layers-1] != ACT_SOFTMAX
-        || cfg->loss == LOSS_BINARY_CROSS_ENTROPY  && cfg->activations[n_layers-1] != ACT_SIGMOID){
+    if((cfg->loss == LOSS_CATEGORICAL_CROSS_ENTROPY && cfg->activations[n_layers-1] != ACT_SOFTMAX)
+        || (cfg->loss == LOSS_BINARY_CROSS_ENTROPY  && cfg->activations[n_layers-1] != ACT_SIGMOID)){
         _mlp_set_error(MLP_ERR_BAD_PAIRING);
         _exit_on_failure();
         return net;
@@ -930,7 +942,7 @@ static Network MLP_Create_Network(const NetworkConfig *cfg){
         return (Network){0};
 }
 
-static void MLP_View_Network(const Network *net){
+MLPDEF void MLP_View_Network(const Network *net){
     if(!net || !net->layers || net->n_layers == 0)
         return;
 
@@ -952,7 +964,7 @@ static void MLP_View_Network(const Network *net){
     printf("\n");
 }
 
-static void MLP_View_Dataset(const Dataset *d){
+MLPDEF void MLP_View_Dataset(const Dataset *d){
     if(!d || !d->inputs)
         return;
 
@@ -991,7 +1003,7 @@ static void MLP_View_Dataset(const Dataset *d){
     printf("\n");
 }
 
-static bool MLP_Train(
+MLPDEF bool MLP_Train(
     Network *net, 
     const Dataset *d,
     TrainOptions *options
@@ -1017,7 +1029,7 @@ static bool MLP_Train(
     if (!ws.activations)
         return false;
     
-    FILE *fp;
+    FILE *fp = NULL;
     if(options->loss_file){
         fp = fopen(options->loss_file, "w");
         if(!fp){
@@ -1090,7 +1102,7 @@ static bool MLP_Train(
     return true;
 }
 
-static bool MLP_Predict(const Network *net, double *input, double *outputs){
+MLPDEF bool MLP_Predict(const Network *net, double *input, double *outputs){
     if (!net || !net->layers || !input || !outputs) {
         _mlp_set_error(MLP_ERR_NULL_POINTER);
         _exit_on_failure();
@@ -1106,7 +1118,7 @@ static bool MLP_Predict(const Network *net, double *input, double *outputs){
     }, outputs);
 }
 
-static bool MLP_Predict_Dataset(const Network *net, const Dataset *d, double *buf){
+MLPDEF bool MLP_Predict_Dataset(const Network *net, const Dataset *d, double *buf){
     if(!_verify_net_d(net, d, false))
         return false;
     if(!buf){
@@ -1133,7 +1145,7 @@ static bool MLP_Predict_Dataset(const Network *net, const Dataset *d, double *bu
     return true;
 }
 
-static void MLP_Destroy_Network(Network *net){
+MLPDEF void MLP_Destroy_Network(Network *net){
     if(!net || !net->layers)
         return;
 
@@ -1147,7 +1159,7 @@ static void MLP_Destroy_Network(Network *net){
 }
 
 
-static bool MLP_Save_Network(const Network *net, const char *filename){
+MLPDEF bool MLP_Save_Network(const Network *net, const char *filename){
     if(!net || !net->layers || !filename){
         _mlp_set_error(MLP_ERR_NULL_POINTER);
         _exit_on_failure();
@@ -1208,7 +1220,7 @@ static bool MLP_Save_Network(const Network *net, const char *filename){
         return false;
 }
 
-static bool MLP_Load_Network(Network *net, const char *filename){
+MLPDEF bool MLP_Load_Network(Network *net, const char *filename){
     if(!net || !filename){
         _mlp_set_error(MLP_ERR_NULL_POINTER);
         return false;
@@ -1320,7 +1332,7 @@ static bool MLP_Load_Network(Network *net, const char *filename){
 }
 
 
-static Dataset MLP_LoadCSV(
+MLPDEF Dataset MLP_LoadCSV(
     const char *filename,
     size_t max_samples,
     size_t n_features,
@@ -1337,7 +1349,7 @@ static Dataset MLP_LoadCSV(
     if (n_features == 0 
         || max_samples == 0
         || max_samples > SIZE_MAX / n_features / sizeof *d.inputs
-        || n_outputs && max_samples > SIZE_MAX / n_outputs / sizeof *d.outputs){
+        || (n_outputs && max_samples > SIZE_MAX / n_outputs / sizeof *d.outputs)){
         _mlp_set_error(MLP_ERR_INVALID_ARGUMENT);
         _exit_on_failure();
         return d;
@@ -1460,7 +1472,7 @@ static Dataset MLP_LoadCSV(
         return (Dataset){0};
 }
 
-static void MLP_Destroy_Dataset(Dataset *d){
+MLPDEF void MLP_Destroy_Dataset(Dataset *d){
     if (!d)
         return;
 
